@@ -1,19 +1,12 @@
 "use client";
+
 import { useState, useEffect, useCallback, useRef } from "react";
 
-// =============================================================================
-// Constants & Types
-// (将来的: lib/constants.ts, lib/types.ts へ切り出し)
-// =============================================================================
+// -----------------------------------------------------------------------------
+// Types
+// -----------------------------------------------------------------------------
 
-const STORAGE_KEYS = {
-  tasks: "focus-tasks",
-  stats: (date: string) => `focus-stats-${date}`,
-  sound: "focus-sound-settings",
-  theme: "focus-theme",
-  selectedTask: "focus-selected-task",
-  showCompleted: "focus-show-completed",
-} as const;
+type TimerStatus = "idle" | "running" | "paused";
 
 type PomodoroMode = "work" | "shortBreak" | "longBreak";
 
@@ -36,7 +29,7 @@ function getModeSeconds(mode: PomodoroMode): number {
 function getModeLabel(mode: PomodoroMode): string {
   switch (mode) {
     case "work":
-      return "作業中";
+      return "作業";
     case "shortBreak":
       return "短休憩";
     case "longBreak":
@@ -44,41 +37,17 @@ function getModeLabel(mode: PomodoroMode): string {
   }
 }
 
-type Theme = "dark" | "light";
-type SoundKey = "tukutuku" | "takibi" | "seseragi";
-
-const SOUND_FILES: Record<SoundKey, string> = {
-  tukutuku: "/sounds/tukutuku.mp3",
-  takibi: "/sounds/takibi.mp3",
-  seseragi: "/sounds/seseragi.mp3",
-};
-
-function getSoundBackground(
-  soundKey: SoundKey,
-  isDark: boolean
-): { background: string } {
-  const opacity = isDark ? 0.12 : 0.08;
-  switch (soundKey) {
-    case "tukutuku":
-      return {
-        background: isDark
-          ? `linear-gradient(180deg, rgba(34,197,94,${opacity}) 0%, transparent 50%, rgba(22,163,74,${opacity}) 100%)`
-          : `linear-gradient(180deg, rgba(34,197,94,${opacity}) 0%, transparent 50%, rgba(22,163,74,${opacity}) 100%)`,
-      };
-    case "takibi":
-      return {
-        background: isDark
-          ? `linear-gradient(180deg, rgba(234,88,12,${opacity}) 0%, transparent 50%, rgba(194,65,12,${opacity}) 100%)`
-          : `linear-gradient(180deg, rgba(234,88,12,${opacity}) 0%, transparent 50%, rgba(194,65,12,${opacity}) 100%)`,
-      };
-    case "seseragi":
-      return {
-        background: isDark
-          ? `linear-gradient(180deg, rgba(6,182,212,${opacity}) 0%, transparent 50%, rgba(14,165,233,${opacity}) 100%)`
-          : `linear-gradient(180deg, rgba(6,182,212,${opacity}) 0%, transparent 50%, rgba(14,165,233,${opacity}) 100%)`,
-      };
-  }
-}
+// ホワイトノイズ選択肢（表示名 → ファイルパス、なしは空）
+const NOISE_OPTIONS: { id: string; label: string; path: string }[] = [
+  { id: "none", label: "なし", path: "" },
+  { id: "tick", label: "チクタク", path: "/sounds/tick.mp3" },
+  { id: "count", label: "秒読み", path: "/sounds/count.mp3" },
+  { id: "cricket", label: "こおろぎ", path: "/sounds/tukutuku.mp3" },
+  { id: "rain", label: "雨", path: "/sounds/rain.mp3" },
+  { id: "river", label: "川", path: "/sounds/seseragi.mp3" },
+  { id: "fire", label: "焚き火", path: "/sounds/takibi.mp3" },
+  { id: "cafe", label: "カフェ", path: "/sounds/cafe.mp3" },
+];
 
 interface Task {
   id: string;
@@ -92,15 +61,13 @@ interface DailyStats {
   completedPomos: number;
 }
 
-interface SoundSettings {
-  soundKey: SoundKey;
-  volume: number;
-}
-
-// =============================================================================
-// Storage Helpers
-// (将来的: hooks/useLocalStorage や lib/storage.ts へ切り出し)
-// =============================================================================
+const STORAGE_KEYS = {
+  tasks: "focus-tasks",
+  stats: (d: string) => `focus-stats-${d}`,
+  selectedTask: "focus-selected-task",
+  noise: "focus-noise",
+  showCompleted: "focus-show-completed",
+} as const;
 
 function getTodayKey() {
   return new Date().toISOString().slice(0, 10);
@@ -111,9 +78,8 @@ function loadTasks(): Task[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.tasks);
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    const list = Array.isArray(parsed) ? parsed : [];
-    return list.map((t: Task) => ({
+    const list = JSON.parse(raw);
+    return (Array.isArray(list) ? list : []).map((t: Task) => ({
       ...t,
       actualPomodoros: typeof t.actualPomodoros === "number" ? t.actualPomodoros : 0,
     }));
@@ -123,150 +89,126 @@ function loadTasks(): Task[] {
 }
 
 function loadStats(): DailyStats {
-  if (typeof window === "undefined")
-    return { focusSeconds: 0, completedPomos: 0 };
+  if (typeof window === "undefined") return { focusSeconds: 0, completedPomos: 0 };
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.stats(getTodayKey()));
     if (!raw) return { focusSeconds: 0, completedPomos: 0 };
-    const parsed = JSON.parse(raw);
+    const p = JSON.parse(raw);
     return {
-      focusSeconds: Number(parsed?.focusSeconds) || 0,
-      completedPomos: Number(parsed?.completedPomos) || 0,
+      focusSeconds: Number(p?.focusSeconds) || 0,
+      completedPomos: Number(p?.completedPomos) || 0,
     };
   } catch {
     return { focusSeconds: 0, completedPomos: 0 };
   }
 }
 
-function loadSoundSettings(): SoundSettings {
-  if (typeof window === "undefined") {
-    return { soundKey: "tukutuku", volume: 0.6 };
-  }
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.sound);
-    if (!raw) return { soundKey: "tukutuku", volume: 0.6 };
-    const parsed = JSON.parse(raw) as Partial<SoundSettings>;
-    const soundKey: SoundKey =
-      parsed?.soundKey === "takibi" || parsed?.soundKey === "seseragi"
-        ? parsed.soundKey
-        : "tukutuku";
-    const volume =
-      typeof parsed?.volume === "number" && parsed.volume >= 0 && parsed.volume <= 1
-        ? parsed.volume
-        : 0.6;
-    return { soundKey, volume };
-  } catch {
-    return { soundKey: "tukutuku", volume: 0.6 };
-  }
-}
-
-function loadTheme(): Theme {
-  if (typeof window === "undefined") return "dark";
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.theme);
-    return raw === "light" || raw === "dark" ? raw : "dark";
-  } catch {
-    return "dark";
-  }
-}
-
 function loadSelectedTaskId(): string | null {
   if (typeof window === "undefined") return null;
+  return localStorage.getItem(STORAGE_KEYS.selectedTask);
+}
+
+function loadNoise(): { selectedNoise: string; noiseVolume: number } {
+  if (typeof window === "undefined") return { selectedNoise: "なし", noiseVolume: 70 };
   try {
-    return localStorage.getItem(STORAGE_KEYS.selectedTask);
+    const raw = localStorage.getItem(STORAGE_KEYS.noise);
+    if (!raw) return { selectedNoise: "なし", noiseVolume: 70 };
+    const p = JSON.parse(raw) as { selectedNoise?: string; noiseVolume?: number };
+    const label = typeof p?.selectedNoise === "string" ? p.selectedNoise : "なし";
+    const vol = typeof p?.noiseVolume === "number" && p.noiseVolume >= 0 && p.noiseVolume <= 100 ? p.noiseVolume : 70;
+    return { selectedNoise: label, noiseVolume: vol };
   } catch {
-    return null;
+    return { selectedNoise: "なし", noiseVolume: 70 };
   }
 }
 
 function loadShowCompleted(): boolean {
   if (typeof window === "undefined") return false;
-  try {
-    return localStorage.getItem(STORAGE_KEYS.showCompleted) === "true";
-  } catch {
-    return false;
-  }
+  return localStorage.getItem(STORAGE_KEYS.showCompleted) === "true";
 }
 
-// =============================================================================
-// Page Component
-// (将来的: TimerSection, TaskSection, StatsSection, SoundSelector, ThemeToggle へ分割)
-// =============================================================================
+// -----------------------------------------------------------------------------
+// Flip digit (1 digit for mm:ss)
+// -----------------------------------------------------------------------------
+
+function FlipDigit({ digit }: { digit: string }) {
+  return (
+    <div className="relative flex flex-col items-center justify-center rounded-lg bg-[#0d0d0d] border border-white/10 overflow-hidden shadow-lg min-w-[clamp(3rem,12vw,5rem)] aspect-[3/4] max-h-[20vh] sm:max-h-[28vh]">
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="text-[clamp(2rem,10vw,4.5rem)] font-black tabular-nums text-white/95 drop-shadow-md">
+          {digit}
+        </span>
+      </div>
+      <div className="absolute left-0 right-0 top-1/2 h-px bg-white/20" aria-hidden />
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Page
+// -----------------------------------------------------------------------------
 
 export default function Home() {
-  // --- Pomodoro state ---
+  const [timerStatus, setTimerStatus] = useState<TimerStatus>("idle");
+  const [isNoiseModalOpen, setIsNoiseModalOpen] = useState(false);
+  const [isFullscreenMode, setIsFullscreenMode] = useState(false);
+  const [selectedNoise, setSelectedNoise] = useState("なし");
+  const [noiseVolume, setNoiseVolume] = useState(70);
+
+  useEffect(() => {
+    const { selectedNoise: s, noiseVolume: v } = loadNoise();
+    setSelectedNoise(s);
+    setNoiseVolume(v);
+  }, []);
+
   const [mode, setMode] = useState<PomodoroMode>("work");
   const [seconds, setSeconds] = useState(WORK_SECONDS);
   const [sessionIndex, setSessionIndex] = useState(1);
-  const [running, setRunning] = useState(false);
-
-  // --- Task state ---
   const [tasks, setTasks] = useState<Task[]>(() => loadTasks());
   const [input, setInput] = useState("");
   const [stats, setStats] = useState<DailyStats>(() => loadStats());
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(
-    () => loadSelectedTaskId()
-  );
-  const [showCompletedTasks, setShowCompletedTasks] = useState<boolean>(
-    () => loadShowCompleted()
-  );
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(() => loadSelectedTaskId());
+  const [showCompletedTasks, setShowCompletedTasks] = useState(() => loadShowCompleted());
 
-  // --- UI state ---
-  const [theme, setTheme] = useState<Theme>(() => loadTheme());
-  const [soundKey, setSoundKey] = useState<SoundKey>(
-    () => loadSoundSettings().soundKey
-  );
-  const [volume] = useState<number>(() => loadSoundSettings().volume);
+  const fullscreenRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const running = timerStatus === "running";
 
   const saveTasks = useCallback((next: Task[]) => {
     setTasks(next);
-    if (typeof window !== "undefined") {
-      localStorage.setItem(STORAGE_KEYS.tasks, JSON.stringify(next));
-    }
+    if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEYS.tasks, JSON.stringify(next));
   }, []);
 
+  // タイマー刻み（既存ロジックを活かす）
   useEffect(() => {
     if (!running) return;
-
-    const timer = setInterval(() => {
+    const t = setInterval(() => {
       setSeconds((prev) => {
         if (prev <= 1) {
-          clearInterval(timer);
-          setRunning(false);
+          clearInterval(t);
+          setTimerStatus("idle");
           try {
             if (audioRef.current) audioRef.current.pause();
-          } catch {
-            /* ignore */
-          }
-
+          } catch {}
           if (mode === "work") {
-            setStats((prevStats) => {
+            setStats((s) => {
               const next = {
-                focusSeconds: prevStats.focusSeconds + WORK_SECONDS,
-                completedPomos: prevStats.completedPomos + 1,
+                focusSeconds: s.focusSeconds + WORK_SECONDS,
+                completedPomos: s.completedPomos + 1,
               };
-              if (typeof window !== "undefined") {
-                localStorage.setItem(
-                  STORAGE_KEYS.stats(getTodayKey()),
-                  JSON.stringify(next)
-                );
-              }
+              if (typeof window !== "undefined")
+                localStorage.setItem(STORAGE_KEYS.stats(getTodayKey()), JSON.stringify(next));
               return next;
             });
             setTasks((prevTasks) => {
               if (!selectedTaskId) return prevTasks;
-              const next = prevTasks.map((t) =>
-                t.id === selectedTaskId
-                  ? {
-                      ...t,
-                      actualPomodoros: (t.actualPomodoros ?? 0) + 1,
-                    }
-                  : t
+              const next = prevTasks.map((task) =>
+                task.id === selectedTaskId
+                  ? { ...task, actualPomodoros: (task.actualPomodoros ?? 0) + 1 }
+                  : task
               );
-              if (typeof window !== "undefined") {
-                localStorage.setItem(STORAGE_KEYS.tasks, JSON.stringify(next));
-              }
+              if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEYS.tasks, JSON.stringify(next));
               return next;
             });
             if (sessionIndex >= SESSIONS_BEFORE_LONG) {
@@ -280,68 +222,125 @@ export default function Home() {
           } else {
             setMode("work");
             setSeconds(WORK_SECONDS);
-            if (mode === "longBreak") {
-              setSessionIndex(1);
-            }
+            if (mode === "longBreak") setSessionIndex(1);
           }
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
-
-    return () => clearInterval(timer);
+    return () => clearInterval(t);
   }, [running, mode, sessionIndex, selectedTaskId]);
 
+  // ノイズ再生（選択中のみ、running のとき再生）
+  const noisePath = NOISE_OPTIONS.find((o) => o.label === selectedNoise)?.path ?? "";
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !noisePath) {
+      audioRef.current = null;
+      return;
+    }
     try {
-      const audio = new Audio(SOUND_FILES[soundKey]);
+      const audio = new Audio(noisePath);
       audio.loop = true;
-      audio.volume = volume;
+      audio.volume = noiseVolume / 100;
       audioRef.current = audio;
       return () => {
         try {
           audio.pause();
-        } catch {
-          /* ignore */
-        }
+        } catch {}
       };
     } catch {
       audioRef.current = null;
     }
-  }, [soundKey, volume]);
+  }, [noisePath, noiseVolume]);
 
   useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.volume = volume;
+    if (audioRef.current) audioRef.current.volume = noiseVolume / 100;
+  }, [noiseVolume]);
+
+  useEffect(() => {
+    if (running && audioRef.current && noisePath) {
+      try {
+        audioRef.current.currentTime = 0;
+        void audioRef.current.play();
+      } catch {}
+    } else if (!running && audioRef.current) {
+      try {
+        audioRef.current.pause();
+      } catch {}
     }
-    if (typeof window === "undefined") return;
-    const settings: SoundSettings = { soundKey, volume };
-    localStorage.setItem(STORAGE_KEYS.sound, JSON.stringify(settings));
-  }, [soundKey, volume]);
+  }, [running, noisePath]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    localStorage.setItem(STORAGE_KEYS.theme, theme);
-  }, [theme]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (selectedTaskId) {
-      localStorage.setItem(STORAGE_KEYS.selectedTask, selectedTaskId);
-    } else {
-      localStorage.removeItem(STORAGE_KEYS.selectedTask);
-    }
+    if (selectedTaskId) localStorage.setItem(STORAGE_KEYS.selectedTask, selectedTaskId);
+    else localStorage.removeItem(STORAGE_KEYS.selectedTask);
   }, [selectedTaskId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    localStorage.setItem(
-      STORAGE_KEYS.showCompleted,
-      String(showCompletedTasks)
-    );
+    localStorage.setItem(STORAGE_KEYS.showCompleted, String(showCompletedTasks));
   }, [showCompletedTasks]);
+
+  // Fullscreen API 同期
+  useEffect(() => {
+    const doc = typeof document !== "undefined" ? document : null;
+    if (!doc) return;
+    const onFullscreenChange = () => {
+      setIsFullscreenMode(!!doc.fullscreenElement);
+    };
+    doc.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => doc.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
+  const enterFullscreen = useCallback(() => {
+    setIsFullscreenMode(true);
+    const el = fullscreenRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      try {
+        if (el.requestFullscreen) {
+          void el.requestFullscreen();
+        }
+      } catch {
+        // fallback: 疑似全画面のみ
+      }
+    });
+  }, []);
+
+  const exitFullscreen = useCallback(() => {
+    try {
+      if (document.fullscreenElement && document.exitFullscreen) {
+        void document.exitFullscreen();
+      } else {
+        setIsFullscreenMode(false);
+      }
+    } catch {
+      setIsFullscreenMode(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        exitFullscreen();
+        if (isNoiseModalOpen) setIsNoiseModalOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [exitFullscreen, isNoiseModalOpen]);
+
+  const handleMainButton = useCallback(() => {
+    if (timerStatus === "idle") {
+      if (!selectedTaskId) return;
+      setTimerStatus("running");
+    } else if (timerStatus === "running") {
+      setTimerStatus("paused");
+    } else {
+      setTimerStatus("running");
+    }
+  }, [timerStatus, selectedTaskId]);
 
   const addTask = () => {
     const text = input.trim();
@@ -357,9 +356,7 @@ export default function Home() {
   };
 
   const toggleTask = (id: string) => {
-    saveTasks(
-      tasks.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
-    );
+    saveTasks(tasks.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t)));
   };
 
   const deleteTask = (id: string) => {
@@ -367,614 +364,363 @@ export default function Home() {
     setSelectedTaskId((prev) => (prev === id ? null : prev));
   };
 
-  const handleStart = () => {
-    setRunning(true);
-    if (audioRef.current) {
-      try {
-        audioRef.current.currentTime = 0;
-        void audioRef.current.play();
-      } catch {
-        /* ignore - file may be missing */
-      }
+  const saveNoise = () => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(
+        STORAGE_KEYS.noise,
+        JSON.stringify({ selectedNoise, noiseVolume })
+      );
     }
+    setIsNoiseModalOpen(false);
   };
 
-  const handlePause = () => {
-    setRunning(false);
-    try {
-      if (audioRef.current) audioRef.current.pause();
-    } catch {
-      /* ignore */
-    }
-  };
-
-  const handleReset = () => {
-    setRunning(false);
-    setSeconds(getModeSeconds(mode));
+  const previewNoise = (path: string) => {
     try {
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.currentTime = 0;
       }
-    } catch {
-      /* ignore */
-    }
+      if (!path) return;
+      const a = new Audio(path);
+      a.volume = noiseVolume / 100;
+      a.loop = false;
+      void a.play();
+      setTimeout(() => a.pause(), 2000);
+    } catch {}
   };
 
   const minutes = Math.floor(seconds / 60);
   const secs = seconds % 60;
-  const focusMinutes = Math.floor(stats.focusSeconds / 60);
-  const selectedTask =
-    selectedTaskId == null
-      ? null
-      : tasks.find((t) => t.id === selectedTaskId) ?? null;
-
+  const selectedTask = selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) ?? null : null;
   const unfinishedTasks = tasks.filter((t) => !t.completed);
   const completedTasks = tasks.filter((t) => t.completed);
   const modeSeconds = getModeSeconds(mode);
-  const remainingRatio =
-    seconds <= 0 ? 0 : Math.min(1, Math.max(0, seconds / modeSeconds));
-  const elapsedRatio = 1 - remainingRatio;
+  const elapsedRatio = seconds <= 0 ? 0 : 1 - Math.min(1, Math.max(0, seconds / modeSeconds));
 
-  const isDark = theme === "dark";
-  const baseBg = isDark ? "#0b0f14" : "#f5f5f7";
-  const soundBg = getSoundBackground(soundKey, isDark);
+  const mainButtonLabel =
+    timerStatus === "idle" ? "集中スタート" : timerStatus === "running" ? "停止" : "続ける";
+  const canStart = !!selectedTaskId;
 
-  return (
-    <main
+  // フリップ用 4 桁: [m1, m2, s1, s2]
+  const d1 = String(Math.floor(minutes / 10));
+  const d2 = String(minutes % 10);
+  const d3 = String(Math.floor(secs / 10));
+  const d4 = String(secs % 10);
+
+  // 通常表示
+  const normalView = (
+    <div
+      className="relative min-h-dvh flex flex-col bg-cover bg-center bg-no-repeat"
       style={{
-        minHeight: "100dvh",
-        background: baseBg,
-        color: isDark ? "#e8edf2" : "#020617",
-        display: "flex",
-        flexDirection: "column",
-        fontFamily: "sans-serif",
-        position: "relative",
+        backgroundImage: "url(/bg.jpg), linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f0f23 100%)",
       }}
     >
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          pointerEvents: "none",
-          ...soundBg,
-        }}
-      />
-      <div
-        style={{
-          position: "relative",
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          maxWidth: "430px",
-          width: "100%",
-          margin: "0 auto",
-          paddingTop: "20px",
-          paddingBottom: "120px",
-          paddingLeft: "16px",
-          paddingRight: "16px",
-        }}
-      >
-        {/* StatsSection: アプリ名 + 今日の集中・完了ポモ */}
-        <header
-          style={{
-            width: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: "12px",
-          }}
-        >
-          <h1
-            style={{
-              fontSize: "18px",
-              margin: 0,
-              letterSpacing: "0.3px",
-              fontWeight: 600,
-            }}
+      <div className="absolute inset-0 bg-black/40" aria-hidden />
+      <div className="relative flex flex-1 flex-col items-center justify-between py-8 px-4 text-white">
+        {/* タスク選択エリア */}
+        <div className="w-full max-w-md text-center">
+          <button
+            type="button"
+            onClick={() => setTaskDrawerOpen(true)}
+            className="text-white/90 text-sm font-medium underline decoration-white/50 underline-offset-2 hover:text-white"
           >
-            Deep Focus
-          </h1>
-          <div style={{ display: "flex", gap: "8px", fontSize: "11px" }}>
-            <span style={{ color: isDark ? "#9ca3b5" : "#6b7280" }}>
-              {focusMinutes}分
-            </span>
-            <span style={{ color: isDark ? "#4b5563" : "#9ca3af" }}>·</span>
-            <span style={{ color: isDark ? "#9ca3b5" : "#6b7280" }}>
-              {stats.completedPomos}ポモ
-            </span>
-          </div>
-        </header>
+            {selectedTask ? selectedTask.text : "タスクを選んでください…"}
+          </button>
+        </div>
 
-        {/* TimerSection: 選択中タスク + 円形タイマー + Start/Pause/Reset */}
-        <section
-          style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            width: "100%",
-            minHeight: 0,
-          }}
-        >
-          {/* 選択中タスク表示 */}
+        {/* 中央: タイマー + リング */}
+        <div className="flex flex-col items-center gap-6">
           <div
+            className="relative flex items-center justify-center w-56 h-56 sm:w-64 sm:h-64 rounded-full border-2 border-white/25"
             style={{
-              width: "100%",
-              textAlign: "center",
-              marginBottom: "16px",
-              fontSize: "13px",
-              color: isDark ? "#9ca3b5" : "#6b7280",
-              minHeight: "20px",
-            }}
-          >
-            {selectedTask ? (
-              <span
-                style={{
-                  color: isDark ? "#e5e7eb" : "#111827",
-                  wordBreak: "break-word",
-                }}
-              >
-                {selectedTask.text}
-              </span>
-            ) : (
-              <span>タスクを選んでください</span>
-            )}
-          </div>
-
-          {/* 円形タイマー: 12時開始・時計回り */}
-          <div
-            style={{
-              position: "relative",
-              width: "220px",
-              height: "220px",
-              flexShrink: 0,
-              marginBottom: "24px",
+              background: "transparent",
             }}
           >
             <div
+              className="absolute inset-0 rounded-full border-2 border-transparent"
               style={{
-                width: "100%",
-                height: "100%",
-                borderRadius: "999px",
-                backgroundImage: `conic-gradient(from 0deg, #38bdf8 0deg, #38bdf8 ${
-                  elapsedRatio * 360
-                }deg, ${isDark ? "rgba(15,23,42,0.5)" : "rgba(203,213,225,0.6)"} ${elapsedRatio * 360}deg)`,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                position: "relative",
-              }}
-            >
-              <div
-                style={{
-                  position: "absolute",
-                  inset: "16px",
-                  borderRadius: "999px",
-                  background: isDark
-                    ? "radial-gradient(circle at 30% 20%, #1e293b, #020617)"
-                    : "radial-gradient(circle at 30% 20%, #e5e7eb, #cbd5e1)",
-                  boxShadow: isDark
-                    ? "0 0 0 1px rgba(148,163,184,0.2)"
-                    : "0 0 0 1px rgba(148,163,184,0.25)",
-                }}
-              />
-              <div
-                style={{
-                  position: "relative",
-                  zIndex: 1,
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "52px",
-                    fontVariantNumeric: "tabular-nums",
-                    letterSpacing: "1px",
-                  }}
-                >
-                  {minutes}:{secs.toString().padStart(2, "0")}
-                </div>
-                <div
-                  style={{
-                    marginTop: "4px",
-                    fontSize: "11px",
-                    color: isDark ? "#9ca3b5" : "#6b7280",
-                    letterSpacing: "0.06em",
-                  }}
-                >
-                  {getModeLabel(mode)}
-                </div>
-                {mode === "work" && (
-                  <div
-                    style={{
-                      marginTop: "2px",
-                      fontSize: "10px",
-                      color: isDark ? "#6b7280" : "#9ca3af",
-                    }}
-                  >
-                    {sessionIndex} / {SESSIONS_BEFORE_LONG}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: "flex", gap: "10px", width: "100%" }}>
-            <button
-              onClick={handleStart}
-              disabled={running}
-              style={{
-                flex: 1,
-                height: "48px",
-                fontSize: "15px",
-                fontWeight: 500,
-                background: running ? "#1d3b6a" : "#2563eb",
-                color: "white",
-                borderRadius: "14px",
-                border: "none",
-                cursor: running ? "not-allowed" : "pointer",
-                opacity: running ? 0.7 : 1,
-                boxShadow: running
-                  ? "none"
-                  : "0 4px 20px rgba(37,99,235,0.4)",
-              }}
-            >
-              Start
-            </button>
-            <button
-              onClick={handlePause}
-              disabled={!running}
-              style={{
-                flex: 1,
-                height: "48px",
-                fontSize: "15px",
-                fontWeight: 500,
-                background: !running
-                  ? isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"
-                  : isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)",
-                color: isDark ? "#e5e7eb" : "#111827",
-                borderRadius: "14px",
-                border: `1px solid ${isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)"}`,
-                cursor: !running ? "not-allowed" : "pointer",
-                opacity: !running ? 0.5 : 1,
-              }}
-            >
-              Pause
-            </button>
-            <button
-              onClick={handleReset}
-              style={{
-                flex: 1,
-                height: "48px",
-                fontSize: "14px",
-                background: isDark
-                  ? "rgba(255,255,255,0.06)"
-                  : "rgba(0,0,0,0.04)",
-                color: isDark ? "#9ca3b5" : "#6b7280",
-                borderRadius: "14px",
-                border: `1px solid ${isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)"}`,
-                cursor: "pointer",
-              }}
-            >
-              Reset
-            </button>
-          </div>
-        </section>
-
-        {/* TaskSection: フル集中モード中は非表示 */}
-        {!running && (
-        <section
-          style={{
-            background: isDark ? "#0f1620" : "#ffffff",
-            border: `1px solid ${isDark ? "#1b2a3a" : "#e5e7eb"}`,
-            borderRadius: "16px",
-            padding: "12px 12px 10px",
-            marginBottom: "10px",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              marginBottom: "10px",
-            }}
-          >
-            <h2
-              style={{
-                fontSize: "15px",
-                margin: 0,
-                fontWeight: 500,
-              }}
-            >
-              Today&apos;s Tasks
-            </h2>
-          </div>
-
-          <div style={{ display: "flex", gap: "10px", marginBottom: "14px" }}>
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && addTask()}
-              placeholder="タスクを入力"
-              style={{
-                flex: 1,
-                height: "44px",
-                padding: "0 12px",
-                fontSize: "13px",
-                borderRadius: "12px",
-                border: `1px solid ${isDark ? "#2a3b4e" : "#e5e7eb"}`,
-                background: isDark ? "#0b0f14" : "#f9fafb",
-                color: isDark ? "#e8edf2" : "#020617",
-                outline: "none",
+                background: `conic-gradient(from 0deg, rgba(255,255,255,0.5) 0deg, rgba(255,255,255,0.5) ${elapsedRatio * 360}deg, transparent ${elapsedRatio * 360}deg)`,
               }}
             />
-            <button
-              onClick={addTask}
-              style={{
-                height: "44px",
-                padding: "0 18px",
-                fontSize: "13px",
-                background: "#1f2937",
-                color: "white",
-                borderRadius: "12px",
-                border: "none",
-                cursor: "pointer",
-              }}
-            >
-              Add
-            </button>
+            <div className="relative z-10 text-center">
+              <span className="text-5xl sm:text-6xl font-light tabular-nums tracking-wider">
+                {String(minutes).padStart(2, "0")}:{String(secs).padStart(2, "0")}
+              </span>
+              <p className="mt-1 text-xs text-white/70">{getModeLabel(mode)}</p>
+            </div>
           </div>
 
-          <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: "10px" }}>
-            {unfinishedTasks.map((task) => (
-              <li
-                key={task.id}
-                style={{
-                  background: isDark
-                    ? task.id === selectedTaskId
-                      ? "#020617"
-                      : "rgba(15,22,32,0.95)"
-                    : "#ffffff",
-                  border:
-                    task.id === selectedTaskId
-                      ? isDark
-                        ? "1px solid rgba(148,163,184,0.35)"
-                        : "1px solid rgba(37,99,235,0.4)"
-                      : `1px solid ${isDark ? "#111827" : "#e5e7eb"}`,
-                  borderRadius: "14px",
-                  padding: "10px 12px",
-                }}
-                onClick={() => setSelectedTaskId(task.id)}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                  <input
-                    type="checkbox"
-                    checked={false}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      toggleTask(task.id);
-                    }}
-                    style={{
-                      width: "18px",
-                      height: "18px",
-                      cursor: "pointer",
-                      accentColor: "#2b6fff",
-                    }}
-                  />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontSize: "14px",
-                        lineHeight: 1.35,
-                        color: isDark ? "#e5e7eb" : "#111827",
-                        wordBreak: "break-word",
-                      }}
-                    >
-                      {task.text}
-                    </div>
-                    <div
-                      style={{
-                        marginTop: "4px",
-                        fontSize: "11px",
-                        color: isDark ? "#6b7280" : "#9ca3b5",
-                      }}
-                    >
-                      {task.id === selectedTaskId ? "選択中" : "タップして選択"}
-                    </div>
-                  </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteTask(task.id);
-                    }}
-                    style={{
-                      height: "32px",
-                      padding: "0 10px",
-                      fontSize: "11px",
-                      background: isDark ? "#020617" : "#f9fafb",
-                      color: isDark ? "#9ca3b5" : "#4b5563",
-                      borderRadius: "10px",
-                      border: `1px solid ${isDark ? "#1f2937" : "#e5e7eb"}`,
-                      cursor: "pointer",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    削除
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
+          {/* メイン操作ボタン 1 つ */}
+          <button
+            type="button"
+            onClick={handleMainButton}
+            disabled={timerStatus === "idle" && !canStart}
+            className={`
+              min-w-[200px] px-8 py-4 rounded-full text-base font-medium
+              transition opacity
+              ${timerStatus === "idle" && !canStart ? "bg-white/30 text-white/60 cursor-not-allowed" : "bg-white/90 text-gray-900 hover:bg-white"}
+            `}
+          >
+            {mainButtonLabel}
+          </button>
+        </div>
 
-          {completedTasks.length > 0 && (
-            <div style={{ marginTop: "16px" }}>
-              <button
-                type="button"
-                onClick={() => setShowCompletedTasks(!showCompletedTasks)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  width: "100%",
-                  padding: "8px 0",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: isDark ? "#9ca3b5" : "#6b7280",
-                  fontSize: "12px",
-                }}
-              >
-                <span style={{ transform: showCompletedTasks ? "rotate(90deg)" : "none" }}>▶</span>
-                <span>完了済みタスク ({completedTasks.length}件)</span>
-                <span>{showCompletedTasks ? "非表示" : "表示"}</span>
-              </button>
-              {showCompletedTasks && (
-                <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: "10px" }}>
-                  {completedTasks.map((task) => (
-                    <li
-                      key={task.id}
-                      style={{
-                        background: isDark ? "rgba(15,22,32,0.95)" : "#f3f4f6",
-                        border: `1px solid ${isDark ? "#111827" : "#e5e7eb"}`,
-                        borderRadius: "14px",
-                        padding: "10px 12px",
-                      }}
-                      onClick={() => setSelectedTaskId(task.id)}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                        <input
-                          type="checkbox"
-                          checked={true}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            toggleTask(task.id);
-                          }}
-                          style={{
-                            width: "18px",
-                            height: "18px",
-                            cursor: "pointer",
-                            accentColor: "#2b6fff",
-                          }}
-                        />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div
-                            style={{
-                              fontSize: "14px",
-                              lineHeight: 1.35,
-                              textDecoration: "line-through",
-                              color: isDark ? "#9ca3b5" : "#6b7280",
-                              wordBreak: "break-word",
-                            }}
-                          >
-                            {task.text}
-                          </div>
-                          <div
-                            style={{
-                              marginTop: "4px",
-                              fontSize: "11px",
-                              color: isDark ? "#6b7280" : "#9ca3b5",
-                            }}
-                          >
-                            完了済み
-                          </div>
-                        </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteTask(task.id);
-                          }}
-                          style={{
-                            height: "32px",
-                            padding: "0 10px",
-                            fontSize: "11px",
-                            background: isDark ? "#020617" : "#f9fafb",
-                            color: isDark ? "#9ca3b5" : "#4b5563",
-                            borderRadius: "10px",
-                            border: `1px solid ${isDark ? "#1f2937" : "#e5e7eb"}`,
-                            cursor: "pointer",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          削除
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-        </section>
-        )}
+        {/* フッター */}
+        <footer className="w-full max-w-lg flex items-center justify-around py-4 px-2 border-t border-white/10">
+          <button type="button" className="flex flex-col items-center gap-1 text-white/70 text-xs hover:text-white/90">
+            <span className="text-lg">◎</span>
+            <span>集中モード</span>
+          </button>
+          <button type="button" className="flex flex-col items-center gap-1 text-white/70 text-xs hover:text-white/90">
+            <span className="text-lg">◷</span>
+            <span>タイマーのモード</span>
+          </button>
+          <button
+            type="button"
+            onClick={enterFullscreen}
+            className="flex flex-col items-center gap-1 text-white/70 text-xs hover:text-white/90"
+          >
+            <span className="text-lg">⛶</span>
+            <span>全画面</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsNoiseModalOpen(true)}
+            className="flex flex-col items-center gap-1 text-white/70 text-xs hover:text-white/90"
+          >
+            <span className="text-lg">♪</span>
+            <span>ホワイトノイズ</span>
+          </button>
+        </footer>
       </div>
+    </div>
+  );
 
-      {/* SoundSelector + ThemeToggle */}
-      <nav
-        style={{
-          position: "fixed",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: "16px",
-          padding: "16px 20px",
-          paddingBottom: "calc(16px + env(safe-area-inset-bottom))",
-          background: isDark
-            ? "rgba(11,15,20,0.95)"
-            : "rgba(245,245,247,0.95)",
-          borderTop: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}`,
-          backdropFilter: "blur(12px)",
-        }}
-      >
-        <select
-          value={soundKey}
-          onChange={(e) => setSoundKey(e.target.value as SoundKey)}
-          aria-label="集中音"
-          style={{
-            height: "40px",
-            padding: "0 14px",
-            borderRadius: "12px",
-            border: `1px solid ${isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)"}`,
-            background: isDark ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.8)",
-            color: isDark ? "#e5e7eb" : "#111827",
-            fontSize: "13px",
-            minWidth: "140px",
-          }}
-        >
-          <option value="tukutuku">ツクツクボウシ</option>
-          <option value="takibi">焚き火</option>
-          <option value="seseragi">川のせせらぎ</option>
-        </select>
+  // 全画面用ラッパー（Fullscreen API のターゲット）
+  const fullscreenUI = (
+    <div
+      ref={fullscreenRef}
+      className="fixed inset-0 z-50 flex flex-col bg-[#1a1a1a] text-white"
+      style={{ display: isFullscreenMode ? "flex" : "none" }}
+    >
+      {/* 左上: 閉じる */}
+      <header className="flex items-center justify-between p-4">
         <button
           type="button"
-          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          aria-label="テーマ切り替え"
-          style={{
-            height: "40px",
-            padding: "0 14px",
-            borderRadius: "12px",
-            border: `1px solid ${isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)"}`,
-            background: isDark ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.8)",
-            color: isDark ? "#9ca3b5" : "#6b7280",
-            fontSize: "13px",
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            cursor: "pointer",
-          }}
+          onClick={exitFullscreen}
+          className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-full"
+          aria-label="閉じる"
         >
-          <span aria-hidden="true">{isDark ? "☾" : "☼"}</span>
-          <span>{isDark ? "ダーク" : "ライト"}</span>
+          ×
         </button>
-      </nav>
+        <button
+          type="button"
+          onClick={() => setIsNoiseModalOpen(true)}
+          className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-full"
+          aria-label="ホワイトノイズ"
+        >
+          ♪
+        </button>
+      </header>
+
+      {/* 中央: フリップクロック風 4 桁 */}
+      <div className="flex-1 flex flex-col items-center justify-center gap-6 px-4">
+        <div className="flex items-center gap-1 sm:gap-2">
+          <FlipDigit digit={d1} />
+          <FlipDigit digit={d2} />
+          <span className="text-white/60 text-4xl sm:text-6xl font-light pb-2">:</span>
+          <FlipDigit digit={d3} />
+          <FlipDigit digit={d4} />
+        </div>
+        <p className="text-sm text-white/60">{getModeLabel(mode)}</p>
+        <button
+          type="button"
+          onClick={handleMainButton}
+          disabled={timerStatus === "idle" && !canStart}
+          className={`
+            min-w-[200px] px-8 py-4 rounded-full text-base font-medium
+            ${timerStatus === "idle" && !canStart ? "bg-white/20 text-white/50 cursor-not-allowed" : "bg-white/90 text-gray-900 hover:bg-white"}
+          `}
+        >
+          {mainButtonLabel}
+        </button>
+      </div>
+    </div>
+  );
+
+  // ホワイトノイズモーダル
+  const noiseModal = (
+    <div
+      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60"
+      style={{ display: isNoiseModalOpen ? "flex" : "none" }}
+      onClick={() => setIsNoiseModalOpen(false)}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="noise-modal-title"
+    >
+      <div
+        className="w-full max-w-md max-h-[85vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-gray-900 text-white p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 id="noise-modal-title" className="text-lg font-semibold mb-4">
+          ホワイトノイズ
+        </h2>
+        <div className="mb-4">
+          <label className="block text-sm text-white/70 mb-2">音量</label>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={noiseVolume}
+            onChange={(e) => setNoiseVolume(Number(e.target.value))}
+            className="w-full h-2 rounded-full appearance-none bg-white/20 accent-white"
+          />
+          <span className="text-sm text-white/60">{noiseVolume}%</span>
+        </div>
+        <ul className="space-y-1 mb-6">
+          {NOISE_OPTIONS.map((opt) => (
+            <li key={opt.id}>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedNoise(opt.label);
+                  if (opt.path) previewNoise(opt.path);
+                }}
+                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-left transition ${selectedNoise === opt.label ? "bg-white/15 ring-1 ring-white/30" : "hover:bg-white/10"}`}
+              >
+                <span>{opt.label}</span>
+                {selectedNoise === opt.label && <span className="text-white">✓</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+        <button
+          type="button"
+          onClick={saveNoise}
+          className="w-full py-3 rounded-xl bg-white text-gray-900 font-medium hover:bg-white/90"
+        >
+          確定
+        </button>
+      </div>
+    </div>
+  );
+
+  // タスク選択ドロワー（簡易: タスク未選択時は「タスクを選んでください」クリックで開く想定）
+  const [taskDrawerOpen, setTaskDrawerOpen] = useState(false);
+  const taskSelector = (
+    <div
+      className="fixed inset-0 z-[55] flex items-end sm:items-center justify-center bg-black/50"
+      style={{ display: taskDrawerOpen ? "flex" : "none" }}
+      onClick={() => setTaskDrawerOpen(false)}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className="w-full max-w-md max-h-[80vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-gray-900 text-white p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold">タスクを選択</h2>
+          <button type="button" onClick={() => setTaskDrawerOpen(false)} className="p-2 text-white/70 hover:text-white">
+            ×
+          </button>
+        </div>
+        <div className="flex gap-2 mb-4">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addTask()}
+            placeholder="新しいタスク"
+            className="flex-1 px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/40"
+          />
+          <button
+            type="button"
+            onClick={addTask}
+            className="px-4 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white"
+          >
+            追加
+          </button>
+        </div>
+        <ul className="space-y-2">
+          {unfinishedTasks.map((task) => (
+            <li key={task.id}>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedTaskId(task.id);
+                  setTaskDrawerOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left ${selectedTaskId === task.id ? "bg-white/15 ring-1 ring-white/30" : "hover:bg-white/10"}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={false}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    toggleTask(task.id);
+                  }}
+                  className="rounded"
+                />
+                <span className="flex-1">{task.text}</span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteTask(task.id);
+                  }}
+                  className="text-white/50 hover:text-red-400 text-sm"
+                >
+                  削除
+                </button>
+              </button>
+            </li>
+          ))}
+        </ul>
+        {completedTasks.length > 0 && (
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => setShowCompletedTasks(!showCompletedTasks)}
+              className="text-sm text-white/60 hover:text-white/80"
+            >
+              {showCompletedTasks ? "▼" : "▶"} 完了済み ({completedTasks.length})
+            </button>
+            {showCompletedTasks && (
+              <ul className="mt-2 space-y-1">
+                {completedTasks.map((task) => (
+                  <li key={task.id} className="flex items-center gap-2 px-4 py-2 text-white/50 text-sm line-through">
+                    <input
+                      type="checkbox"
+                      checked
+                      onChange={() => toggleTask(task.id)}
+                      className="rounded"
+                    />
+                    {task.text}
+                    <button type="button" onClick={() => deleteTask(task.id)} className="text-red-400/80 text-xs">
+                      削除
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <main className="relative min-h-dvh">
+      {/* 通常表示: 背景 + タイマー + フッター */}
+      <div className={isFullscreenMode ? "invisible" : ""}>{normalView}</div>
+
+      {/* 全画面モード UI */}
+      {fullscreenUI}
+
+      {/* モーダル類 */}
+      {noiseModal}
+      {taskSelector}
     </main>
   );
 }
