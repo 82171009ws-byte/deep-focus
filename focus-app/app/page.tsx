@@ -37,17 +37,68 @@ function getModeLabel(mode: PomodoroMode): string {
   }
 }
 
-// ホワイトノイズ選択肢（表示名 → ファイルパス、なしは空）
+// ホワイトノイズ選択肢（id: 内部キー, label: 表示名）
 const NOISE_OPTIONS: { id: string; label: string; path: string }[] = [
   { id: "none", label: "なし", path: "" },
   { id: "tick", label: "チクタク", path: "/sounds/tick.mp3" },
   { id: "count", label: "秒読み", path: "/sounds/count.mp3" },
-  { id: "cricket", label: "こおろぎ", path: "/sounds/tukutuku.mp3" },
+  { id: "tukutuku", label: "ツクツクボウシ", path: "/sounds/tukutuku.mp3" },
   { id: "rain", label: "雨", path: "/sounds/rain.mp3" },
-  { id: "river", label: "川", path: "/sounds/seseragi.mp3" },
-  { id: "fire", label: "焚き火", path: "/sounds/takibi.mp3" },
+  { id: "seseragi", label: "川", path: "/sounds/seseragi.mp3" },
+  { id: "takibi", label: "焚き火", path: "/sounds/takibi.mp3" },
   { id: "cafe", label: "カフェ", path: "/sounds/cafe.mp3" },
 ];
+
+// 集中音ごとの背景テーマ
+interface NoiseTheme {
+  backgroundImage: string;
+  overlay: string;
+}
+
+const BASE_BACKGROUND =
+  "url(/bg.jpg), linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f0f23 100%)";
+
+function getNoiseTheme(noiseId: string, running: boolean): NoiseTheme {
+  // 停止・ポーズ時は通常背景に戻す
+  if (!running) {
+    return {
+      backgroundImage: BASE_BACKGROUND,
+      overlay: "rgba(0,0,0,0.45)",
+    };
+  }
+
+  // running 中のみ集中音ごとの没入背景に切り替え
+  switch (noiseId) {
+    case "takibi":
+      // 暖色の暗い背景
+      return {
+        backgroundImage:
+          "radial-gradient(circle at 20% 0%, #ffb347 0%, #ff7b3b 18%, #4a1b0f 48%, #050308 100%)",
+        overlay: "rgba(0,0,0,0.25)",
+      };
+    case "seseragi":
+      // 青系の静かな背景
+      return {
+        backgroundImage:
+          "linear-gradient(135deg, #021b3a 0%, #035f73 40%, #0b1b33 70%, #020611 100%)",
+        overlay: "rgba(0,0,0,0.25)",
+      };
+    case "tukutuku":
+      // ツクツクボウシ（夏の緑系背景）
+      return {
+        backgroundImage:
+          "linear-gradient(135deg, #05210f 0%, #0b4a24 35%, #0c6f34 55%, #04120a 100%)",
+        overlay: "rgba(0,0,0,0.22)",
+      };
+    default:
+      // その他の音は少しだけ雰囲気を変える
+      return {
+        backgroundImage:
+          "linear-gradient(160deg, #15162b 0%, #1c2645 40%, #050712 100%)",
+        overlay: "rgba(0,0,0,0.28)",
+      };
+  }
+}
 
 interface Task {
   id: string;
@@ -109,16 +160,30 @@ function loadSelectedTaskId(): string | null {
 }
 
 function loadNoise(): { selectedNoise: string; noiseVolume: number } {
-  if (typeof window === "undefined") return { selectedNoise: "なし", noiseVolume: 70 };
+  if (typeof window === "undefined") return { selectedNoise: "none", noiseVolume: 70 };
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.noise);
-    if (!raw) return { selectedNoise: "なし", noiseVolume: 70 };
+    if (!raw) return { selectedNoise: "none", noiseVolume: 70 };
     const p = JSON.parse(raw) as { selectedNoise?: string; noiseVolume?: number };
-    const label = typeof p?.selectedNoise === "string" ? p.selectedNoise : "なし";
+    const rawValue = typeof p?.selectedNoise === "string" ? p.selectedNoise : "none";
+    // 旧バージョンで保存していた「表示名」→ 内部キーへのマッピング
+    const legacyMap: Record<string, string> = {
+      なし: "none",
+      チクタク: "tick",
+      秒読み: "count",
+      こおろぎ: "tukutuku",
+      雨: "rain",
+      川: "seseragi",
+      焚き火: "takibi",
+      カフェ: "cafe",
+    };
+    const candidate =
+      legacyMap[rawValue] ??
+      (NOISE_OPTIONS.some((o) => o.id === rawValue) ? rawValue : "none");
     const vol = typeof p?.noiseVolume === "number" && p.noiseVolume >= 0 && p.noiseVolume <= 100 ? p.noiseVolume : 70;
-    return { selectedNoise: label, noiseVolume: vol };
+    return { selectedNoise: candidate, noiseVolume: vol };
   } catch {
-    return { selectedNoise: "なし", noiseVolume: 70 };
+    return { selectedNoise: "none", noiseVolume: 70 };
   }
 }
 
@@ -152,7 +217,7 @@ export default function Home() {
   const [timerStatus, setTimerStatus] = useState<TimerStatus>("idle");
   const [isNoiseModalOpen, setIsNoiseModalOpen] = useState(false);
   const [isFullscreenMode, setIsFullscreenMode] = useState(false);
-  const [selectedNoise, setSelectedNoise] = useState("なし");
+  const [selectedNoise, setSelectedNoise] = useState("none");
   const [noiseVolume, setNoiseVolume] = useState(70);
 
   useEffect(() => {
@@ -233,7 +298,7 @@ export default function Home() {
   }, [running, mode, sessionIndex, selectedTaskId]);
 
   // ノイズ再生（選択中のみ、running のとき再生）
-  const noisePath = NOISE_OPTIONS.find((o) => o.label === selectedNoise)?.path ?? "";
+  const noisePath = NOISE_OPTIONS.find((o) => o.id === selectedNoise)?.path ?? "";
   useEffect(() => {
     if (typeof window === "undefined" || !noisePath) {
       audioRef.current = null;
@@ -397,6 +462,8 @@ export default function Home() {
   const modeSeconds = getModeSeconds(mode);
   const elapsedRatio = seconds <= 0 ? 0 : 1 - Math.min(1, Math.max(0, seconds / modeSeconds));
 
+  const noiseTheme = getNoiseTheme(selectedNoise, running);
+
   const mainButtonLabel =
     timerStatus === "idle" ? "集中スタート" : timerStatus === "running" ? "停止" : "続ける";
   const canStart = !!selectedTaskId;
@@ -412,10 +479,14 @@ export default function Home() {
     <div
       className="relative min-h-dvh flex flex-col bg-cover bg-center bg-no-repeat"
       style={{
-        backgroundImage: "url(/bg.jpg), linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f0f23 100%)",
+        backgroundImage: noiseTheme.backgroundImage,
       }}
     >
-      <div className="absolute inset-0 bg-black/40" aria-hidden />
+      <div
+        className="absolute inset-0"
+        style={{ background: noiseTheme.overlay }}
+        aria-hidden
+      />
       <div className="relative flex flex-1 flex-col items-center justify-between py-8 px-4 text-white">
         {/* タスク選択エリア */}
         <div className="w-full max-w-md text-center">
@@ -583,13 +654,13 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => {
-                  setSelectedNoise(opt.label);
+                  setSelectedNoise(opt.id);
                   if (opt.path) previewNoise(opt.path);
                 }}
-                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-left transition ${selectedNoise === opt.label ? "bg-white/15 ring-1 ring-white/30" : "hover:bg-white/10"}`}
+                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-left transition ${selectedNoise === opt.id ? "bg-white/15 ring-1 ring-white/30" : "hover:bg-white/10"}`}
               >
                 <span>{opt.label}</span>
-                {selectedNoise === opt.label && <span className="text-white">✓</span>}
+                {selectedNoise === opt.id && <span className="text-white">✓</span>}
               </button>
             </li>
           ))}
