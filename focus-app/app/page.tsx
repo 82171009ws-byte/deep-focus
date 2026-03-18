@@ -10,19 +10,55 @@ type TimerStatus = "idle" | "running" | "paused";
 
 type PomodoroMode = "work" | "shortBreak" | "longBreak";
 
-const WORK_SECONDS = 25 * 60;
-const SHORT_BREAK_SECONDS = 5 * 60;
-const LONG_BREAK_SECONDS = 15 * 60;
+type FocusPresetKey = "quick" | "standard" | "deep";
+
 const SESSIONS_BEFORE_LONG = 4;
 
-function getModeSeconds(mode: PomodoroMode): number {
+interface FocusPresetConfig {
+  label: string;
+  focusSeconds: number;
+  shortBreakSeconds: number;
+  longBreakSeconds: number;
+}
+
+const FOCUS_PRESETS: Record<FocusPresetKey, FocusPresetConfig> = {
+  quick: {
+    label: "クイック集中",
+    focusSeconds: 10 * 60,
+    shortBreakSeconds: 3 * 60,
+    longBreakSeconds: 10 * 60,
+  },
+  standard: {
+    label: "スタンダード",
+    focusSeconds: 25 * 60,
+    shortBreakSeconds: 5 * 60,
+    longBreakSeconds: 15 * 60,
+  },
+  deep: {
+    label: "ディープ集中",
+    focusSeconds: 60 * 60,
+    shortBreakSeconds: 10 * 60,
+    longBreakSeconds: 20 * 60,
+  },
+};
+
+const FOCUS_PRESET_KEYS: FocusPresetKey[] = ["quick", "standard", "deep"];
+
+const DEFAULT_FOCUS_PRESET: FocusPresetKey = "standard";
+
+function getPresetConfig(preset: FocusPresetKey): FocusPresetConfig {
+  return FOCUS_PRESETS[preset];
+}
+
+function getModeSeconds(mode: PomodoroMode, preset: FocusPresetKey): number {
+  const config = getPresetConfig(preset);
   switch (mode) {
     case "work":
-      return WORK_SECONDS;
+      return config.focusSeconds;
     case "shortBreak":
-      return SHORT_BREAK_SECONDS;
+      return config.shortBreakSeconds;
     case "longBreak":
-      return LONG_BREAK_SECONDS;
+      return config.longBreakSeconds;
   }
 }
 
@@ -112,16 +148,41 @@ interface DailyStats {
   completedPomos: number;
 }
 
+interface StreakState {
+  currentStreak: number;
+  lastAchievedDate: string | null;
+  achievedToday: boolean;
+}
+
+const DEFAULT_DAILY_GOAL = 3;
+
 const STORAGE_KEYS = {
   tasks: "focus-tasks",
   stats: (d: string) => `focus-stats-${d}`,
   selectedTask: "focus-selected-task",
   noise: "focus-noise",
+  focusPreset: "focus-preset",
+  dailyGoal: "focus-daily-goal",
+  streak: "focus-streak",
   showCompleted: "focus-show-completed",
 } as const;
 
 function getTodayKey() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function shiftDateKey(dateKey: string, dayOffset: number) {
+  const date = new Date(`${dateKey}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + dayOffset);
+  return date.toISOString().slice(0, 10);
+}
+
+function formatDurationLabel(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60);
+  if (minutes < 60) return `${minutes}分`;
+  const hours = Math.floor(minutes / 60);
+  const remainMinutes = minutes % 60;
+  return remainMinutes > 0 ? `${hours}時間${remainMinutes}分` : `${hours}時間`;
 }
 
 function loadTasks(): Task[] {
@@ -152,6 +213,47 @@ function loadStats(): DailyStats {
   } catch {
     return { focusSeconds: 0, completedPomos: 0 };
   }
+}
+
+function loadStreak(): StreakState {
+  if (typeof window === "undefined") {
+    return { currentStreak: 0, lastAchievedDate: null, achievedToday: false };
+  }
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.streak);
+    if (!raw) {
+      return { currentStreak: 0, lastAchievedDate: null, achievedToday: false };
+    }
+    const p = JSON.parse(raw) as Partial<StreakState>;
+    const currentStreak = Number(p?.currentStreak) || 0;
+    const lastAchievedDate = typeof p?.lastAchievedDate === "string" ? p.lastAchievedDate : null;
+    const achievedToday = typeof p?.achievedToday === "boolean" ? p.achievedToday : false;
+    const todayKey = getTodayKey();
+    const yesterdayKey = shiftDateKey(todayKey, -1);
+
+    if (!lastAchievedDate) {
+      return { currentStreak: 0, lastAchievedDate: null, achievedToday: false };
+    }
+
+    if (lastAchievedDate === todayKey) {
+      return { currentStreak, lastAchievedDate, achievedToday: true };
+    }
+
+    if (lastAchievedDate === yesterdayKey) {
+      return { currentStreak, lastAchievedDate, achievedToday: false };
+    }
+
+    return { currentStreak: 0, lastAchievedDate, achievedToday: false };
+  } catch {
+    return { currentStreak: 0, lastAchievedDate: null, achievedToday: false };
+  }
+}
+
+function loadDailyGoal(): number {
+  if (typeof window === "undefined") return DEFAULT_DAILY_GOAL;
+  const raw = Number(localStorage.getItem(STORAGE_KEYS.dailyGoal));
+  if (!Number.isFinite(raw)) return DEFAULT_DAILY_GOAL;
+  return Math.min(20, Math.max(1, Math.floor(raw)));
 }
 
 function loadSelectedTaskId(): string | null {
@@ -187,6 +289,13 @@ function loadNoise(): { selectedNoise: string; noiseVolume: number } {
   }
 }
 
+function loadFocusPreset(): FocusPresetKey {
+  if (typeof window === "undefined") return DEFAULT_FOCUS_PRESET;
+  const raw = localStorage.getItem(STORAGE_KEYS.focusPreset);
+  if (raw === "quick" || raw === "standard" || raw === "deep") return raw;
+  return DEFAULT_FOCUS_PRESET;
+}
+
 function loadShowCompleted(): boolean {
   if (typeof window === "undefined") return false;
   return localStorage.getItem(STORAGE_KEYS.showCompleted) === "true";
@@ -219,6 +328,11 @@ export default function Home() {
   const [isFullscreenMode, setIsFullscreenMode] = useState(false);
   const [selectedNoise, setSelectedNoise] = useState("none");
   const [noiseVolume, setNoiseVolume] = useState(70);
+  const [justCompletedWork, setJustCompletedWork] = useState(false);
+  const [isStopConfirmOpen, setIsStopConfirmOpen] = useState(false);
+  const [focusPreset, setFocusPreset] = useState<FocusPresetKey>(() => loadFocusPreset());
+  const [streak, setStreak] = useState<StreakState>(() => loadStreak());
+  const [dailyGoalPomos, setDailyGoalPomos] = useState<number>(() => loadDailyGoal());
 
   useEffect(() => {
     const { selectedNoise: s, noiseVolume: v } = loadNoise();
@@ -227,7 +341,7 @@ export default function Home() {
   }, []);
 
   const [mode, setMode] = useState<PomodoroMode>("work");
-  const [seconds, setSeconds] = useState(WORK_SECONDS);
+  const [seconds, setSeconds] = useState(() => getModeSeconds("work", loadFocusPreset()));
   const [sessionIndex, setSessionIndex] = useState(1);
   const [tasks, setTasks] = useState<Task[]>(() => loadTasks());
   const [input, setInput] = useState("");
@@ -237,8 +351,12 @@ export default function Home() {
 
   const fullscreenRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const activeDateKeyRef = useRef(getTodayKey());
 
-  const running = timerStatus === "running";
+  const isIdle = timerStatus === "idle";
+  const isRunning = timerStatus === "running";
+  const isPaused = timerStatus === "paused";
+  const running = isRunning;
 
   const saveTasks = useCallback((next: Task[]) => {
     setTasks(next);
@@ -248,6 +366,7 @@ export default function Home() {
   // タイマー刻み（既存ロジックを活かす）
   useEffect(() => {
     if (!running) return;
+    const presetConfig = getPresetConfig(focusPreset);
     const t = setInterval(() => {
       setSeconds((prev) => {
         if (prev <= 1) {
@@ -259,12 +378,32 @@ export default function Home() {
           if (mode === "work") {
             setStats((s) => {
               const next = {
-                focusSeconds: s.focusSeconds + WORK_SECONDS,
+                focusSeconds: s.focusSeconds + presetConfig.focusSeconds,
                 completedPomos: s.completedPomos + 1,
               };
-              if (typeof window !== "undefined")
-                localStorage.setItem(STORAGE_KEYS.stats(getTodayKey()), JSON.stringify(next));
+              if (typeof window !== "undefined") {
+                localStorage.setItem(
+                  STORAGE_KEYS.stats(getTodayKey()),
+                  JSON.stringify(next)
+                );
+              }
+              // 作業セッション完了時だけ、軽い完了演出フラグを立てる
+              setJustCompletedWork(true);
               return next;
+            });
+            setStreak((prev) => {
+              const todayKey = getTodayKey();
+              if (prev.lastAchievedDate === todayKey && prev.achievedToday) {
+                return prev;
+              }
+              const yesterdayKey = shiftDateKey(todayKey, -1);
+              const nextCurrentStreak =
+                prev.lastAchievedDate === yesterdayKey ? prev.currentStreak + 1 : 1;
+              return {
+                currentStreak: nextCurrentStreak,
+                lastAchievedDate: todayKey,
+                achievedToday: true,
+              };
             });
             setTasks((prevTasks) => {
               if (!selectedTaskId) return prevTasks;
@@ -278,15 +417,15 @@ export default function Home() {
             });
             if (sessionIndex >= SESSIONS_BEFORE_LONG) {
               setMode("longBreak");
-              setSeconds(LONG_BREAK_SECONDS);
+              setSeconds(presetConfig.longBreakSeconds);
             } else {
               setMode("shortBreak");
-              setSeconds(SHORT_BREAK_SECONDS);
+              setSeconds(presetConfig.shortBreakSeconds);
               setSessionIndex((s) => s + 1);
             }
           } else {
             setMode("work");
-            setSeconds(WORK_SECONDS);
+            setSeconds(presetConfig.focusSeconds);
             if (mode === "longBreak") setSessionIndex(1);
           }
           return 0;
@@ -295,7 +434,51 @@ export default function Home() {
       });
     }, 1000);
     return () => clearInterval(t);
-  }, [running, mode, sessionIndex, selectedTaskId]);
+  }, [running, mode, sessionIndex, selectedTaskId, focusPreset]);
+
+  // 完了演出は短時間だけ表示
+  useEffect(() => {
+    if (!justCompletedWork) return;
+    const id = setTimeout(() => setJustCompletedWork(false), 2200);
+    return () => clearTimeout(id);
+  }, [justCompletedWork]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(STORAGE_KEYS.streak, JSON.stringify(streak));
+  }, [streak]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(STORAGE_KEYS.dailyGoal, String(dailyGoalPomos));
+  }, [dailyGoalPomos]);
+
+  const syncDailyState = useCallback(() => {
+    const todayKey = getTodayKey();
+    if (activeDateKeyRef.current === todayKey) return;
+    activeDateKeyRef.current = todayKey;
+    setStats(loadStats());
+    setStreak(loadStreak());
+  }, []);
+
+  useEffect(() => {
+    syncDailyState();
+    const intervalId = window.setInterval(syncDailyState, 60 * 1000);
+    document.addEventListener("visibilitychange", syncDailyState);
+    window.addEventListener("focus", syncDailyState);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", syncDailyState);
+      window.removeEventListener("focus", syncDailyState);
+    };
+  }, [syncDailyState]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(STORAGE_KEYS.focusPreset, focusPreset);
+    if (!isIdle) return;
+    setSeconds(getModeSeconds(mode, focusPreset));
+  }, [focusPreset, isIdle, mode]);
 
   // ノイズ再生（選択中のみ、running のとき再生）
   const noisePath = NOISE_OPTIONS.find((o) => o.id === selectedNoise)?.path ?? "";
@@ -398,14 +581,47 @@ export default function Home() {
 
   const handleMainButton = useCallback(() => {
     if (timerStatus === "idle") {
-      if (!selectedTaskId) return;
       setTimerStatus("running");
     } else if (timerStatus === "running") {
       setTimerStatus("paused");
     } else {
       setTimerStatus("running");
     }
-  }, [timerStatus, selectedTaskId]);
+  }, [timerStatus]);
+
+  const handleResume = useCallback(() => {
+    setTimerStatus("running");
+  }, []);
+
+  const handleRequestStop = useCallback(() => {
+    setIsStopConfirmOpen(true);
+  }, []);
+
+  const handleCancelStop = useCallback(() => {
+    setIsStopConfirmOpen(false);
+  }, []);
+
+  const handleConfirmStop = useCallback(() => {
+    setTimerStatus("idle");
+    setSeconds(getModeSeconds(mode, focusPreset));
+    setJustCompletedWork(false);
+    setIsStopConfirmOpen(false);
+    try {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+    } catch {}
+  }, [mode, focusPreset]);
+
+  const handleSelectFocusPreset = useCallback(
+    (nextPreset: FocusPresetKey) => {
+      if (!isIdle) return;
+      setFocusPreset(nextPreset);
+      setSeconds(getModeSeconds(mode, nextPreset));
+    },
+    [isIdle, mode]
+  );
 
   const addTask = () => {
     const text = input.trim();
@@ -459,14 +675,136 @@ export default function Home() {
   const selectedTask = selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) ?? null : null;
   const unfinishedTasks = tasks.filter((t) => !t.completed);
   const completedTasks = tasks.filter((t) => t.completed);
-  const modeSeconds = getModeSeconds(mode);
+  const modeSeconds = getModeSeconds(mode, focusPreset);
   const elapsedRatio = seconds <= 0 ? 0 : 1 - Math.min(1, Math.max(0, seconds / modeSeconds));
 
   const noiseTheme = getNoiseTheme(selectedNoise, running);
+  const currentPresetConfig = getPresetConfig(focusPreset);
 
   const mainButtonLabel =
-    timerStatus === "idle" ? "集中スタート" : timerStatus === "running" ? "停止" : "続ける";
-  const canStart = !!selectedTaskId;
+    isIdle
+      ? mode === "work"
+        ? "集中スタート"
+        : "休憩する"
+      : isRunning
+        ? "一時停止"
+        : "続ける";
+  const mainButtonWrapClass = isPaused
+    ? "flex w-full max-w-sm flex-col gap-4"
+    : "flex w-full max-w-[220px] items-center justify-center";
+  const mainButtonClass = isPaused
+    ? "w-full px-5 py-3 rounded-full text-sm font-medium"
+    : "w-full px-8 py-4 rounded-full text-base font-medium";
+  const contentGapClass = isPaused
+    ? "gap-3 sm:gap-4"
+    : "gap-4 sm:gap-5";
+  const footerClass = isPaused
+    ? "w-full max-w-lg flex items-center justify-around pt-3 pb-[max(8px,env(safe-area-inset-bottom))] px-2 border-t border-white/10"
+    : "w-full max-w-lg flex items-center justify-around pt-4 pb-[max(10px,env(safe-area-inset-bottom))] px-2 border-t border-white/10";
+  const fullscreenContentGapClass = isPaused
+    ? "gap-4 px-4"
+    : "gap-5 px-4";
+
+  const renderPresetSelector = (wrapperClassName: string) => (
+    <div className={wrapperClassName}>
+      <div className="mb-2 flex items-center justify-center gap-2 text-[11px] text-white/60">
+        <span>集中時間</span>
+        <span className="h-px w-8 bg-white/20" aria-hidden />
+        <span>{currentPresetConfig.label}</span>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        {FOCUS_PRESET_KEYS.map((presetKey) => {
+          const preset = getPresetConfig(presetKey);
+          const isActivePreset = focusPreset === presetKey;
+          const isDisabled = !isIdle;
+          return (
+            <button
+              key={presetKey}
+              type="button"
+              onClick={() => handleSelectFocusPreset(presetKey)}
+              disabled={isDisabled}
+              className={`
+                flex min-h-[72px] flex-col items-center justify-center rounded-2xl px-2 py-2 text-center transition
+                ${isActivePreset ? "bg-white/20 text-white ring-1 ring-white/30" : "bg-white/10 text-white/80 hover:bg-white/15"}
+                ${isDisabled ? "cursor-not-allowed opacity-55" : ""}
+              `}
+            >
+              <span className="text-[11px] font-medium leading-tight">{preset.label}</span>
+              <span className="mt-1 text-base font-semibold tabular-nums">
+                {Math.round(preset.focusSeconds / 60)}分
+              </span>
+              <span className="mt-0.5 text-[10px] text-white/55">
+                休憩 {Math.round(preset.shortBreakSeconds / 60)}分
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  const renderTodaySummary = (wrapperClassName: string) => (
+    <div className={wrapperClassName}>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="rounded-2xl bg-white/10 px-3 py-2 text-center backdrop-blur-sm">
+          <div className="text-[10px] text-white/55">今日の集中時間</div>
+          <div className="mt-1 text-sm font-semibold text-white tabular-nums">
+            {formatDurationLabel(stats.focusSeconds)}
+          </div>
+        </div>
+        <div
+          className={`rounded-2xl bg-white/10 px-3 py-2 text-center backdrop-blur-sm transition-transform duration-500 ${
+            justCompletedWork ? "scale-[1.03] bg-white/20" : ""
+          }`}
+        >
+          <div className="text-[10px] text-white/55">完了ポモ数</div>
+          <div className={`mt-1 text-sm font-semibold text-white tabular-nums ${justCompletedWork ? "animate-pulse" : ""}`}>
+            {stats.completedPomos}
+          </div>
+        </div>
+        <div
+          className={`rounded-2xl bg-white/10 px-3 py-2 text-center backdrop-blur-sm transition-transform duration-500 ${
+            justCompletedWork ? "scale-[1.03] bg-white/20" : ""
+          }`}
+        >
+          <div className="text-[10px] text-white/55">連続記録</div>
+          <div className={`mt-1 text-sm font-semibold text-white tabular-nums ${justCompletedWork ? "animate-pulse" : ""}`}>
+            {streak.currentStreak}日
+          </div>
+        </div>
+      </div>
+
+      <div
+        className={`mt-2 rounded-2xl bg-white/10 px-3 py-3 text-center backdrop-blur-sm transition-transform duration-500 ${
+          stats.completedPomos >= dailyGoalPomos ? "ring-1 ring-emerald-300/25" : ""
+        }`}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-left">
+            <div className="text-[10px] text-white/55">今日の目標</div>
+            <div className={`mt-1 text-sm font-semibold text-white tabular-nums ${justCompletedWork ? "animate-pulse" : ""}`}>
+              {stats.completedPomos} / {dailyGoalPomos}
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-[10px] text-white/55">
+            <span>目標変更</span>
+            <select
+              value={dailyGoalPomos}
+              onChange={(e) => setDailyGoalPomos(Number(e.target.value))}
+              className="rounded-full bg-white/10 px-2 py-1 text-xs text-white outline-none ring-1 ring-white/15"
+              aria-label="今日の目標ポモ数"
+            >
+              {Array.from({ length: 20 }, (_, index) => index + 1).map((value) => (
+                <option key={value} value={value} className="text-gray-900">
+                  {value}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </div>
+    </div>
+  );
 
   // フリップ用 4 桁: [m1, m2, s1, s2]
   const d1 = String(Math.floor(minutes / 10));
@@ -487,9 +825,9 @@ export default function Home() {
         style={{ background: noiseTheme.overlay }}
         aria-hidden
       />
-      <div className="relative flex flex-1 flex-col items-center justify-between py-8 px-4 text-white">
+      <div className="relative flex flex-1 flex-col items-center justify-between px-4 pt-6 pb-[max(14px,env(safe-area-inset-bottom))] text-white sm:pt-8 sm:pb-[max(18px,env(safe-area-inset-bottom))]">
         {/* タスク選択エリア */}
-        <div className="w-full max-w-md text-center">
+        <div className="w-full max-w-md text-center pt-1">
           <button
             type="button"
             onClick={() => setTaskDrawerOpen(true)}
@@ -500,13 +838,20 @@ export default function Home() {
         </div>
 
         {/* 中央: タイマー + リング */}
-        <div className="flex flex-col items-center gap-6">
+        <div className={`flex flex-col items-center ${contentGapClass}`}>
           <div
-            className="relative flex items-center justify-center w-56 h-56 sm:w-64 sm:h-64 rounded-full border-2 border-white/25"
+            className={`relative flex items-center justify-center w-56 h-56 sm:w-64 sm:h-64 rounded-full border-2 border-white/25 transition
+              ${justCompletedWork ? "border-white/70 shadow-xl animate-pulse" : ""}`}
             style={{
               background: "transparent",
             }}
           >
+            {justCompletedWork && (
+              <div
+                className="absolute inset-[-6px] rounded-full border border-white/30 shadow-[0_0_24px_rgba(255,255,255,0.18)] animate-pulse"
+                aria-hidden
+              />
+            )}
             <div
               className="absolute inset-0 rounded-full border-2 border-transparent"
               style={{
@@ -521,23 +866,56 @@ export default function Home() {
             </div>
           </div>
 
-          {/* メイン操作ボタン 1 つ */}
-          <button
-            type="button"
-            onClick={handleMainButton}
-            disabled={timerStatus === "idle" && !canStart}
-            className={`
-              min-w-[200px] px-8 py-4 rounded-full text-base font-medium
-              transition opacity
-              ${timerStatus === "idle" && !canStart ? "bg-white/30 text-white/60 cursor-not-allowed" : "bg-white/90 text-gray-900 hover:bg-white"}
-            `}
-          >
-            {mainButtonLabel}
-          </button>
+          {/* 作業セッション完了メッセージ */}
+          {justCompletedWork && (
+            <div className="mt-0.5 text-xs text-emerald-50/90 bg-white/10 px-3 py-1 rounded-full backdrop-blur-sm transition-opacity duration-500 animate-pulse">
+              1セッション完了
+            </div>
+          )}
+
+          {renderPresetSelector(
+            `w-full max-w-sm ${isIdle ? "opacity-100" : "opacity-70"}`
+          )}
+
+          {/* メイン操作ボタン（状態別） */}
+          <div className={mainButtonWrapClass}>
+            {isPaused ? (
+              <>
+              <button
+                type="button"
+                onClick={handleResume}
+                className={mainButtonClass + " bg-white/90 text-gray-900 hover:bg-white"}
+              >
+                続ける
+              </button>
+              <button
+                type="button"
+                onClick={handleRequestStop}
+                className={mainButtonClass + " border border-white/40 text-white/90 bg-white/5 hover:bg-white/10"}
+              >
+                停止する
+              </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={handleMainButton}
+                className={`
+                  ${mainButtonClass}
+                  transition opacity
+                  bg-white/90 text-gray-900 hover:bg-white
+                `}
+              >
+                {mainButtonLabel}
+              </button>
+            )}
+          </div>
+
+          {renderTodaySummary("w-full max-w-sm")}
         </div>
 
         {/* フッター */}
-        <footer className="w-full max-w-lg flex items-center justify-around py-4 px-2 border-t border-white/10">
+        <footer className={footerClass}>
           <button type="button" className="flex flex-col items-center gap-1 text-white/70 text-xs hover:text-white/90">
             <span className="text-lg">◎</span>
             <span>集中モード</span>
@@ -595,7 +973,7 @@ export default function Home() {
       </header>
 
       {/* 中央: フリップクロック風 4 桁 */}
-      <div className="flex-1 flex flex-col items-center justify-center gap-6 px-4">
+      <div className={`flex-1 flex flex-col items-center justify-center ${fullscreenContentGapClass}`}>
         <div className="flex items-center gap-1 sm:gap-2">
           <FlipDigit digit={d1} />
           <FlipDigit digit={d2} />
@@ -604,17 +982,44 @@ export default function Home() {
           <FlipDigit digit={d4} />
         </div>
         <p className="text-sm text-white/60">{getModeLabel(mode)}</p>
-        <button
-          type="button"
-          onClick={handleMainButton}
-          disabled={timerStatus === "idle" && !canStart}
-          className={`
-            min-w-[200px] px-8 py-4 rounded-full text-base font-medium
-            ${timerStatus === "idle" && !canStart ? "bg-white/20 text-white/50 cursor-not-allowed" : "bg-white/90 text-gray-900 hover:bg-white"}
-          `}
-        >
-          {mainButtonLabel}
-        </button>
+        {justCompletedWork && (
+          <p className="text-xs text-emerald-50/90 bg-white/10 px-3 py-1 rounded-full backdrop-blur-sm transition-opacity duration-500 animate-pulse">
+            1セッション完了
+          </p>
+        )}
+
+        {renderPresetSelector(`w-full max-w-sm ${isIdle ? "opacity-100" : "opacity-70"}`)}
+        {renderTodaySummary("w-full max-w-sm")}
+
+        {isPaused ? (
+          <div className="flex w-full max-w-sm flex-col gap-4 sm:flex-row">
+            <button
+              type="button"
+              onClick={handleResume}
+              className="flex-1 px-5 py-3 rounded-full text-sm font-medium bg-white/90 text-gray-900 hover:bg-white"
+            >
+              続ける
+            </button>
+            <button
+              type="button"
+              onClick={handleRequestStop}
+              className="flex-1 px-5 py-3 rounded-full text-sm font-medium border border-white/40 text-white/90 bg-white/5 hover:bg-white/10"
+            >
+              停止する
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={handleMainButton}
+            className={`
+              min-w-[200px] px-8 py-4 rounded-full text-base font-medium
+              bg-white/90 text-gray-900 hover:bg-white
+            `}
+          >
+            {mainButtonLabel}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -781,6 +1186,43 @@ export default function Home() {
     </div>
   );
 
+  // 停止確認モーダル
+  const stopConfirmModal = (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60"
+      style={{ display: isStopConfirmOpen ? "flex" : "none" }}
+      onClick={handleCancelStop}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className="w-full max-w-xs mx-4 rounded-2xl bg-[#050713]/95 text-white p-5 space-y-4 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-sm font-semibold">ポモドーロを停止しますか？</h2>
+        <p className="text-xs text-white/70">
+          いまのセッション時間は記録されません。現在の進行はリセットされます。
+        </p>
+        <div className="flex gap-2 pt-2">
+          <button
+            type="button"
+            onClick={handleCancelStop}
+            className="flex-1 px-3 py-2 rounded-full text-xs font-medium border border-white/30 text-white/90 bg-transparent hover:bg-white/10"
+          >
+            キャンセル
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirmStop}
+            className="flex-1 px-3 py-2 rounded-full text-xs font-medium bg-white/90 text-gray-900 hover:bg-white"
+          >
+            停止する
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <main className="relative min-h-dvh">
       {/* 通常表示: 背景 + タイマー + フッター */}
@@ -791,6 +1233,7 @@ export default function Home() {
 
       {/* モーダル類 */}
       {noiseModal}
+      {stopConfirmModal}
       {taskSelector}
     </main>
   );

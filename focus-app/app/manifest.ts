@@ -2,11 +2,11 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Deep Focus",
-    short_name: "Deep Focus",
+    name: "Deep Focus 2",
+    short_name: "DF2",
     description:
       "ポモドーロ＋軽量タスク管理＋集中音で没入できる集中アプリ",
-    start_url: "/",
+    start_url: "/?v=2",
     display: "standalone",
     background_color: "#0b0f14",
     theme_color: "#0b0f14",
