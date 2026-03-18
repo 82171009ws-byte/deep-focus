@@ -205,7 +205,7 @@ function getNoiseTheme(
     };
   }
 
-  // running 中のみ集中音ごとの没入背景に切り替え
+  // running 中のみ「対応する集中音テーマ」がある場合に上書きする
   switch (noiseId) {
     case "takibi":
       // 暖色の暗い背景
@@ -229,12 +229,8 @@ function getNoiseTheme(
         overlay: "rgba(0,0,0,0.22)",
       };
     default:
-      // その他の音は少しだけ雰囲気を変える
-      return {
-        backgroundImage:
-          "linear-gradient(160deg, #15162b 0%, #1c2645 40%, #050712 100%)",
-        overlay: "rgba(0,0,0,0.28)",
-      };
+      // 対応テーマがない音（なし/チクタク/秒読み/雨/カフェなど）は選択テーマを維持
+      return { backgroundImage: base.backgroundImage, overlay: base.overlay };
   }
 }
 
