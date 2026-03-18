@@ -12,7 +12,15 @@ type PomodoroMode = "work" | "shortBreak" | "longBreak";
 
 type FocusPresetKey = "quick" | "standard" | "deep";
 
-type BackgroundThemeKey = "sea" | "desert" | "snow" | "night";
+type BackgroundThemeKey =
+  | "sea"
+  | "desert"
+  | "snow"
+  | "night"
+  | "mint"
+  | "peach"
+  | "lavender"
+  | "sky";
 type NoiseBackgroundMode = "auto" | "manual";
 
 const SESSIONS_BEFORE_LONG = 4;
@@ -90,6 +98,7 @@ const NOISE_OPTIONS: { id: string; label: string; path: string }[] = [
 
 interface BackgroundTheme {
   key: BackgroundThemeKey;
+  type: "immersive" | "pastel";
   label: string;
   backgroundImage: string;
   overlay: string;
@@ -98,6 +107,7 @@ interface BackgroundTheme {
 const BACKGROUND_THEMES: BackgroundTheme[] = [
   {
     key: "sea",
+    type: "immersive",
     label: "海",
     backgroundImage:
       "radial-gradient(circle at 30% 10%, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0) 35%), linear-gradient(160deg, #031b34 0%, #046a84 45%, #0a2f5a 100%)",
@@ -105,6 +115,7 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
   },
   {
     key: "desert",
+    type: "immersive",
     label: "砂漠",
     backgroundImage:
       "radial-gradient(circle at 25% 15%, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0) 40%), linear-gradient(160deg, #2a1406 0%, #b36b2a 45%, #f2c27c 100%)",
@@ -112,6 +123,7 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
   },
   {
     key: "snow",
+    type: "immersive",
     label: "雪山",
     backgroundImage:
       "radial-gradient(circle at 30% 10%, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 45%), linear-gradient(160deg, #0b1b2a 0%, #3b6a8d 45%, #d7e8f4 100%)",
@@ -119,10 +131,43 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
   },
   {
     key: "night",
+    type: "immersive",
     label: "夜空",
     backgroundImage:
       "radial-gradient(circle at 70% 20%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 35%), radial-gradient(circle at 20% 60%, rgba(144,97,255,0.20) 0%, rgba(144,97,255,0) 40%), linear-gradient(160deg, #05040f 0%, #0b0f2a 55%, #02030a 100%)",
     overlay: "rgba(0,0,0,0.35)",
+  },
+  {
+    key: "mint",
+    type: "pastel",
+    label: "ミント",
+    backgroundImage:
+      "radial-gradient(circle at 25% 15%, rgba(255,255,255,0.65) 0%, rgba(255,255,255,0) 45%), linear-gradient(155deg, #b7f4e3 0%, #7fe8d8 45%, #6bd7ff 100%)",
+    overlay: "rgba(0,0,0,0.18)",
+  },
+  {
+    key: "peach",
+    type: "pastel",
+    label: "ピーチ",
+    backgroundImage:
+      "radial-gradient(circle at 25% 15%, rgba(255,255,255,0.65) 0%, rgba(255,255,255,0) 45%), linear-gradient(155deg, #ffd1b8 0%, #ffb1c8 45%, #ffc6a5 100%)",
+    overlay: "rgba(0,0,0,0.20)",
+  },
+  {
+    key: "lavender",
+    type: "pastel",
+    label: "ラベンダー",
+    backgroundImage:
+      "radial-gradient(circle at 30% 12%, rgba(255,255,255,0.65) 0%, rgba(255,255,255,0) 45%), linear-gradient(155deg, #e6d7ff 0%, #cbb8ff 45%, #a9b8ff 100%)",
+    overlay: "rgba(0,0,0,0.22)",
+  },
+  {
+    key: "sky",
+    type: "pastel",
+    label: "スカイ",
+    backgroundImage:
+      "radial-gradient(circle at 30% 12%, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0) 45%), linear-gradient(155deg, #b9e7ff 0%, #a9c7ff 45%, #d7f3ff 100%)",
+    overlay: "rgba(0,0,0,0.16)",
   },
 ];
 
@@ -358,7 +403,17 @@ function loadFocusPreset(): FocusPresetKey {
 function loadBackgroundTheme(): BackgroundThemeKey {
   if (typeof window === "undefined") return DEFAULT_BACKGROUND_THEME;
   const raw = localStorage.getItem(STORAGE_KEYS.backgroundTheme);
-  if (raw === "sea" || raw === "desert" || raw === "snow" || raw === "night") return raw;
+  if (
+    raw === "sea" ||
+    raw === "desert" ||
+    raw === "snow" ||
+    raw === "night" ||
+    raw === "mint" ||
+    raw === "peach" ||
+    raw === "lavender" ||
+    raw === "sky"
+  )
+    return raw;
   return DEFAULT_BACKGROUND_THEME;
 }
 
@@ -956,8 +1011,10 @@ export default function Home() {
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          {BACKGROUND_THEMES.map((t) => {
+        {(() => {
+          const immersiveThemes = BACKGROUND_THEMES.filter((t) => t.type === "immersive");
+          const pastelThemes = BACKGROUND_THEMES.filter((t) => t.type === "pastel");
+          const renderThemeCard = (t: BackgroundTheme) => {
             const active = t.key === backgroundTheme;
             return (
               <button
@@ -965,21 +1022,17 @@ export default function Home() {
                 type="button"
                 onClick={() => setBackgroundTheme(t.key)}
                 className={`relative overflow-hidden rounded-2xl border text-left transition ${
-                  active ? "border-white/60 ring-1 ring-white/30" : "border-white/10 hover:border-white/25"
+                  active
+                    ? "border-white/60 ring-1 ring-white/30"
+                    : "border-white/10 hover:border-white/25"
                 }`}
               >
                 <div
                   className="h-24 w-full"
-                  style={{
-                    backgroundImage: t.backgroundImage,
-                  }}
+                  style={{ backgroundImage: t.backgroundImage }}
                   aria-hidden
                 />
-                <div
-                  className="absolute inset-0"
-                  style={{ background: t.overlay }}
-                  aria-hidden
-                />
+                <div className="absolute inset-0" style={{ background: t.overlay }} aria-hidden />
                 <div className="relative p-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-semibold">{t.label}</span>
@@ -992,13 +1045,34 @@ export default function Home() {
                         ? "乾いた夕暮れ"
                         : t.key === "snow"
                           ? "澄んだ雪景色"
-                          : "深い夜空"}
+                          : t.key === "night"
+                            ? "深い夜空"
+                            : t.key === "mint"
+                              ? "明るいミント"
+                              : t.key === "peach"
+                                ? "やわらかいピーチ"
+                                : t.key === "lavender"
+                                  ? "淡いラベンダー"
+                                  : "軽やかなスカイ"}
                   </div>
                 </div>
               </button>
             );
-          })}
-        </div>
+          };
+
+          return (
+            <div className="space-y-5">
+              <div>
+                <div className="mb-2 text-xs font-semibold text-white/70">没入テーマ</div>
+                <div className="grid grid-cols-2 gap-3">{immersiveThemes.map(renderThemeCard)}</div>
+              </div>
+              <div>
+                <div className="mb-2 text-xs font-semibold text-white/70">ポップテーマ</div>
+                <div className="grid grid-cols-2 gap-3">{pastelThemes.map(renderThemeCard)}</div>
+              </div>
+            </div>
+          );
+        })()}
 
         <button
           type="button"
