@@ -404,6 +404,7 @@ export default function Home() {
   const [noiseVolume, setNoiseVolume] = useState(70);
   const [justCompletedWork, setJustCompletedWork] = useState(false);
   const [isStopConfirmOpen, setIsStopConfirmOpen] = useState(false);
+  const [isFullscreenControlsVisible, setIsFullscreenControlsVisible] = useState(false);
   const [focusPreset, setFocusPreset] = useState<FocusPresetKey>(() => loadFocusPreset());
   const [streak, setStreak] = useState<StreakState>(() => loadStreak());
   const [dailyGoalPomos, setDailyGoalPomos] = useState<number>(() => loadDailyGoal());
@@ -428,6 +429,7 @@ export default function Home() {
 
   const fullscreenRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const fullscreenControlsHideTimeoutRef = useRef<number | null>(null);
   const activeDateKeyRef = useRef(getTodayKey());
 
   const isIdle = timerStatus === "idle";
@@ -556,6 +558,29 @@ export default function Home() {
       window.removeEventListener("focus", syncDailyState);
     };
   }, [syncDailyState]);
+
+  // 全画面時の最小UI（再生/停止）の表示制御
+  const showFullscreenControlsTemporarily = useCallback(
+    (ms: number = 3000) => {
+      setIsFullscreenControlsVisible(true);
+      if (fullscreenControlsHideTimeoutRef.current) {
+        window.clearTimeout(fullscreenControlsHideTimeoutRef.current);
+      }
+      fullscreenControlsHideTimeoutRef.current = window.setTimeout(() => {
+        setIsFullscreenControlsVisible(false);
+      }, ms);
+    },
+    []
+  );
+
+  useEffect(() => {
+    // 全画面の開始/解除時は一旦非表示
+    setIsFullscreenControlsVisible(false);
+    if (fullscreenControlsHideTimeoutRef.current) {
+      window.clearTimeout(fullscreenControlsHideTimeoutRef.current);
+      fullscreenControlsHideTimeoutRef.current = null;
+    }
+  }, [isFullscreenMode]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1145,6 +1170,7 @@ export default function Home() {
       ref={fullscreenRef}
       className="fixed inset-0 z-50 flex flex-col text-white"
       style={{ display: isFullscreenMode ? "flex" : "none" }}
+      onPointerDown={() => showFullscreenControlsTemporarily(2800)}
     >
       {/* 背景は通常画面と同じロジック */}
       <div
@@ -1178,6 +1204,40 @@ export default function Home() {
               {String(minutes).padStart(2, "0")}:{String(secs).padStart(2, "0")}
             </div>
           </div>
+        </div>
+
+        {/* 下中央: 再生/停止（タップで表示→数秒後にフェードアウト） */}
+        <div
+          className={`absolute left-1/2 -translate-x-1/2 bottom-[max(18px,env(safe-area-inset-bottom))] z-10 flex gap-4 transition-opacity duration-300 ${
+            isFullscreenControlsVisible
+              ? "opacity-100 pointer-events-auto"
+              : "opacity-0 pointer-events-none"
+          }`}
+        >
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleMainButton();
+              showFullscreenControlsTemporarily(1800);
+            }}
+            className="flex items-center justify-center rounded-full bg-white/10 backdrop-blur-md border border-white/20 shadow-sm px-7 py-3 text-sm font-medium text-white/90 hover:bg-white/15"
+          >
+            再生
+          </button>
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleRequestStop();
+              showFullscreenControlsTemporarily(1800);
+            }}
+            className="flex items-center justify-center rounded-full bg-white/10 backdrop-blur-md border border-white/20 shadow-sm px-7 py-3 text-sm font-medium text-white/90 hover:bg-white/15"
+          >
+            停止
+          </button>
         </div>
       </div>
     </div>
