@@ -1211,12 +1211,11 @@ export default function Home() {
           className={`absolute left-1/2 -translate-x-1/2 bottom-[max(18px,env(safe-area-inset-bottom))] z-10 flex gap-4 transition-opacity duration-300 ${
             isFullscreenControlsVisible
               ? "opacity-100 pointer-events-auto"
-              : "opacity-0 pointer-events-none"
+              : "opacity-0 pointer-events-auto"
           }`}
         >
           <button
             type="button"
-            onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
               handleMainButton();
@@ -1224,11 +1223,14 @@ export default function Home() {
             }}
             className="flex items-center justify-center rounded-full bg-white/10 backdrop-blur-md border border-white/20 shadow-sm px-7 py-3 text-sm font-medium text-white/90 hover:bg-white/15"
           >
-            再生
+            {timerStatus === "idle"
+              ? "再生"
+              : timerStatus === "running"
+                ? "一時停止"
+                : "続ける"}
           </button>
           <button
             type="button"
-            onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
               handleRequestStop();
