@@ -1224,77 +1224,42 @@ export default function Home() {
   const fullscreenUI = (
     <div
       ref={fullscreenRef}
-      className="fixed inset-0 z-50 flex flex-col bg-[#1a1a1a] text-white"
+      className="fixed inset-0 z-50 flex flex-col text-white"
       style={{ display: isFullscreenMode ? "flex" : "none" }}
     >
-      {/* 左上: 閉じる */}
-      <header className="flex items-center justify-between p-4">
-        <button
-          type="button"
-          onClick={exitFullscreen}
-          className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-full"
-          aria-label="閉じる"
+      {/* 背景は通常画面と同じロジック */}
+      <div
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: noiseTheme.backgroundImage }}
+        aria-hidden
+      />
+      <div
+        className="absolute inset-0"
+        style={{ background: noiseTheme.overlay }}
+        aria-hidden
+      />
+
+      {/* 余計なUIを消し、タイマーだけ中央に大きく */}
+      <div className="relative flex-1 flex items-center justify-center p-4">
+        <div
+          className="relative flex items-center justify-center rounded-full border-2 border-white/25"
+          style={{
+            width: "clamp(280px, 80vw, 520px)",
+            height: "clamp(280px, 80vw, 520px)",
+          }}
         >
-          ×
-        </button>
-        <button
-          type="button"
-          onClick={() => setIsNoiseModalOpen(true)}
-          className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-full"
-          aria-label="ホワイトノイズ"
-        >
-          ♪
-        </button>
-      </header>
-
-      {/* 中央: フリップクロック風 4 桁 */}
-      <div className={`flex-1 flex flex-col items-center justify-center ${fullscreenContentGapClass}`}>
-        <div className="flex items-center gap-1 sm:gap-2">
-          <FlipDigit digit={d1} />
-          <FlipDigit digit={d2} />
-          <span className="text-white/60 text-4xl sm:text-6xl font-light pb-2">:</span>
-          <FlipDigit digit={d3} />
-          <FlipDigit digit={d4} />
-        </div>
-        <p className="text-sm text-white/60">{getModeLabel(mode)}</p>
-        {justCompletedWork && (
-          <p className="text-xs text-emerald-50/90 bg-white/10 px-3 py-1 rounded-full backdrop-blur-sm transition-opacity duration-500 animate-pulse">
-            1セッション完了
-          </p>
-        )}
-
-        {renderPresetSelector(`w-full max-w-sm ${isIdle ? "opacity-100" : "opacity-70"}`)}
-        {renderTodaySummary("w-full max-w-sm")}
-
-        {isPaused ? (
-          <div className="flex w-full max-w-sm flex-col gap-4 sm:flex-row">
-            <button
-              type="button"
-              onClick={handleResume}
-              className="flex-1 px-5 py-3 rounded-full text-sm font-medium bg-white/90 text-gray-900 hover:bg-white"
-            >
-              続ける
-            </button>
-            <button
-              type="button"
-              onClick={handleRequestStop}
-              className="flex-1 px-5 py-3 rounded-full text-sm font-medium border border-white/40 text-white/90 bg-white/5 hover:bg-white/10"
-            >
-              停止する
-            </button>
+          <div
+            className="absolute inset-0 rounded-full border-2 border-transparent"
+            style={{
+              background: `conic-gradient(from 0deg, rgba(255,255,255,0.55) 0deg, rgba(255,255,255,0.55) ${elapsedRatio * 360}deg, transparent ${elapsedRatio * 360}deg)`,
+            }}
+          />
+          <div className="relative z-10 text-center">
+            <div className="text-[clamp(3.5rem,12vw,6rem)] font-light tabular-nums tracking-wider">
+              {String(minutes).padStart(2, "0")}:{String(secs).padStart(2, "0")}
+            </div>
           </div>
-        ) : (
-          <button
-            type="button"
-            onClick={handleMainButton}
-            className={`
-              min-w-[200px] px-8 py-4 rounded-full text-base font-medium
-              bg-white/90 text-gray-900 hover:bg-white
-            `}
-          >
-            {mainButtonLabel}
-          </button>
-        )}
+        </div>
       </div>
     </div>
   );
