@@ -12,6 +12,9 @@ type PomodoroMode = "work" | "shortBreak" | "longBreak";
 
 type FocusPresetKey = "quick" | "standard" | "deep";
 
+type BackgroundThemeKey = "sea" | "desert" | "snow" | "night";
+type NoiseBackgroundMode = "auto" | "manual";
+
 const SESSIONS_BEFORE_LONG = 4;
 
 interface FocusPresetConfig {
@@ -85,21 +88,75 @@ const NOISE_OPTIONS: { id: string; label: string; path: string }[] = [
   { id: "cafe", label: "カフェ", path: "/sounds/cafe.mp3" },
 ];
 
+interface BackgroundTheme {
+  key: BackgroundThemeKey;
+  label: string;
+  backgroundImage: string;
+  overlay: string;
+}
+
+const BACKGROUND_THEMES: BackgroundTheme[] = [
+  {
+    key: "sea",
+    label: "海",
+    backgroundImage:
+      "radial-gradient(circle at 30% 10%, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0) 35%), linear-gradient(160deg, #031b34 0%, #046a84 45%, #0a2f5a 100%)",
+    overlay: "rgba(0,0,0,0.28)",
+  },
+  {
+    key: "desert",
+    label: "砂漠",
+    backgroundImage:
+      "radial-gradient(circle at 25% 15%, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0) 40%), linear-gradient(160deg, #2a1406 0%, #b36b2a 45%, #f2c27c 100%)",
+    overlay: "rgba(0,0,0,0.32)",
+  },
+  {
+    key: "snow",
+    label: "雪山",
+    backgroundImage:
+      "radial-gradient(circle at 30% 10%, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 45%), linear-gradient(160deg, #0b1b2a 0%, #3b6a8d 45%, #d7e8f4 100%)",
+    overlay: "rgba(0,0,0,0.28)",
+  },
+  {
+    key: "night",
+    label: "夜空",
+    backgroundImage:
+      "radial-gradient(circle at 70% 20%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 35%), radial-gradient(circle at 20% 60%, rgba(144,97,255,0.20) 0%, rgba(144,97,255,0) 40%), linear-gradient(160deg, #05040f 0%, #0b0f2a 55%, #02030a 100%)",
+    overlay: "rgba(0,0,0,0.35)",
+  },
+];
+
+const DEFAULT_BACKGROUND_THEME: BackgroundThemeKey = "night";
+
+function getBackgroundTheme(themeKey: BackgroundThemeKey): BackgroundTheme {
+  return (
+    BACKGROUND_THEMES.find((t) => t.key === themeKey) ??
+    BACKGROUND_THEMES.find((t) => t.key === DEFAULT_BACKGROUND_THEME) ??
+    BACKGROUND_THEMES[0]
+  );
+}
+
 // 集中音ごとの背景テーマ
 interface NoiseTheme {
   backgroundImage: string;
   overlay: string;
 }
 
-const BASE_BACKGROUND =
-  "url(/bg.jpg), linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f0f23 100%)";
-
-function getNoiseTheme(noiseId: string, running: boolean): NoiseTheme {
+function getNoiseTheme(
+  noiseId: string,
+  running: boolean,
+  baseTheme: BackgroundThemeKey,
+  noiseBackgroundMode: NoiseBackgroundMode
+): NoiseTheme {
+  const base = getBackgroundTheme(baseTheme);
+  if (noiseBackgroundMode === "manual") {
+    return { backgroundImage: base.backgroundImage, overlay: base.overlay };
+  }
   // 停止・ポーズ時は通常背景に戻す
   if (!running) {
     return {
-      backgroundImage: BASE_BACKGROUND,
-      overlay: "rgba(0,0,0,0.45)",
+      backgroundImage: base.backgroundImage,
+      overlay: base.overlay,
     };
   }
 
@@ -163,6 +220,8 @@ const STORAGE_KEYS = {
   noise: "focus-noise",
   focusPreset: "focus-preset",
   dailyGoal: "focus-daily-goal",
+  backgroundTheme: "focus-background-theme",
+  noiseBackgroundMode: "focus-noise-background-mode",
   streak: "focus-streak",
   showCompleted: "focus-show-completed",
 } as const;
@@ -296,6 +355,20 @@ function loadFocusPreset(): FocusPresetKey {
   return DEFAULT_FOCUS_PRESET;
 }
 
+function loadBackgroundTheme(): BackgroundThemeKey {
+  if (typeof window === "undefined") return DEFAULT_BACKGROUND_THEME;
+  const raw = localStorage.getItem(STORAGE_KEYS.backgroundTheme);
+  if (raw === "sea" || raw === "desert" || raw === "snow" || raw === "night") return raw;
+  return DEFAULT_BACKGROUND_THEME;
+}
+
+function loadNoiseBackgroundMode(): NoiseBackgroundMode {
+  if (typeof window === "undefined") return "auto";
+  const raw = localStorage.getItem(STORAGE_KEYS.noiseBackgroundMode);
+  if (raw === "auto" || raw === "manual") return raw;
+  return "auto";
+}
+
 function loadShowCompleted(): boolean {
   if (typeof window === "undefined") return false;
   return localStorage.getItem(STORAGE_KEYS.showCompleted) === "true";
@@ -326,6 +399,7 @@ export default function Home() {
   const [timerStatus, setTimerStatus] = useState<TimerStatus>("idle");
   const [isNoiseModalOpen, setIsNoiseModalOpen] = useState(false);
   const [isFullscreenMode, setIsFullscreenMode] = useState(false);
+  const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
   const [selectedNoise, setSelectedNoise] = useState("none");
   const [noiseVolume, setNoiseVolume] = useState(70);
   const [justCompletedWork, setJustCompletedWork] = useState(false);
@@ -333,6 +407,12 @@ export default function Home() {
   const [focusPreset, setFocusPreset] = useState<FocusPresetKey>(() => loadFocusPreset());
   const [streak, setStreak] = useState<StreakState>(() => loadStreak());
   const [dailyGoalPomos, setDailyGoalPomos] = useState<number>(() => loadDailyGoal());
+  const [backgroundTheme, setBackgroundTheme] = useState<BackgroundThemeKey>(() =>
+    loadBackgroundTheme()
+  );
+  const [noiseBackgroundMode, setNoiseBackgroundMode] = useState<NoiseBackgroundMode>(() =>
+    loadNoiseBackgroundMode()
+  );
 
   useEffect(() => {
     const { selectedNoise: s, noiseVolume: v } = loadNoise();
@@ -452,6 +532,16 @@ export default function Home() {
     if (typeof window === "undefined") return;
     localStorage.setItem(STORAGE_KEYS.dailyGoal, String(dailyGoalPomos));
   }, [dailyGoalPomos]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(STORAGE_KEYS.backgroundTheme, backgroundTheme);
+  }, [backgroundTheme]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(STORAGE_KEYS.noiseBackgroundMode, noiseBackgroundMode);
+  }, [noiseBackgroundMode]);
 
   const syncDailyState = useCallback(() => {
     const todayKey = getTodayKey();
@@ -678,8 +768,14 @@ export default function Home() {
   const modeSeconds = getModeSeconds(mode, focusPreset);
   const elapsedRatio = seconds <= 0 ? 0 : 1 - Math.min(1, Math.max(0, seconds / modeSeconds));
 
-  const noiseTheme = getNoiseTheme(selectedNoise, running);
+  const noiseTheme = getNoiseTheme(
+    selectedNoise,
+    running,
+    backgroundTheme,
+    noiseBackgroundMode
+  );
   const currentPresetConfig = getPresetConfig(focusPreset);
+  const currentBackgroundTheme = getBackgroundTheme(backgroundTheme);
 
   const mainButtonLabel =
     isIdle
@@ -806,6 +902,115 @@ export default function Home() {
     </div>
   );
 
+  const themeModal = (
+    <div
+      className="fixed inset-0 z-[65] flex items-end sm:items-center justify-center bg-black/60"
+      style={{ display: isThemeModalOpen ? "flex" : "none" }}
+      onClick={() => setIsThemeModalOpen(false)}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="theme-modal-title"
+    >
+      <div
+        className="w-full max-w-md max-h-[85vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-gray-900 text-white p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h2 id="theme-modal-title" className="text-lg font-semibold">
+            テーマ
+          </h2>
+          <button
+            type="button"
+            onClick={() => setIsThemeModalOpen(false)}
+            className="p-2 text-white/70 hover:text-white"
+            aria-label="閉じる"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="mb-4 flex items-center justify-between rounded-2xl bg-white/5 px-4 py-3 ring-1 ring-white/10">
+          <div>
+            <div className="text-sm font-semibold">音に合わせて背景を変える</div>
+            <div className="mt-0.5 text-[11px] text-white/60">
+              ON: 実行中のみ集中音テーマ / OFF: 常に選択テーマ
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              setNoiseBackgroundMode((m) => (m === "auto" ? "manual" : "auto"))
+            }
+            className={`relative h-7 w-12 rounded-full transition ${
+              noiseBackgroundMode === "auto" ? "bg-emerald-400/60" : "bg-white/15"
+            }`}
+            aria-pressed={noiseBackgroundMode === "auto"}
+            aria-label="音に合わせて背景を変える"
+          >
+            <span
+              className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition ${
+                noiseBackgroundMode === "auto" ? "left-6" : "left-0.5"
+              }`}
+              aria-hidden
+            />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          {BACKGROUND_THEMES.map((t) => {
+            const active = t.key === backgroundTheme;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setBackgroundTheme(t.key)}
+                className={`relative overflow-hidden rounded-2xl border text-left transition ${
+                  active ? "border-white/60 ring-1 ring-white/30" : "border-white/10 hover:border-white/25"
+                }`}
+              >
+                <div
+                  className="h-24 w-full"
+                  style={{
+                    backgroundImage: t.backgroundImage,
+                  }}
+                  aria-hidden
+                />
+                <div
+                  className="absolute inset-0"
+                  style={{ background: t.overlay }}
+                  aria-hidden
+                />
+                <div className="relative p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold">{t.label}</span>
+                    {active && <span className="text-sm">✓</span>}
+                  </div>
+                  <div className="mt-1 text-[11px] text-white/65">
+                    {t.key === "sea"
+                      ? "青く静かな海"
+                      : t.key === "desert"
+                        ? "乾いた夕暮れ"
+                        : t.key === "snow"
+                          ? "澄んだ雪景色"
+                          : "深い夜空"}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setIsThemeModalOpen(false)}
+          className="mt-5 w-full py-3 rounded-xl bg-white text-gray-900 font-medium hover:bg-white/90"
+        >
+          閉じる
+        </button>
+      </div>
+    </div>
+  );
+
   // フリップ用 4 桁: [m1, m2, s1, s2]
   const d1 = String(Math.floor(minutes / 10));
   const d2 = String(minutes % 10);
@@ -916,18 +1121,18 @@ export default function Home() {
 
         {/* フッター */}
         <footer className={footerClass}>
-          <button type="button" className="flex flex-col items-center gap-1 text-white/70 text-xs hover:text-white/90">
-            <span className="text-lg">◎</span>
-            <span>集中モード</span>
-          </button>
-          <button type="button" className="flex flex-col items-center gap-1 text-white/70 text-xs hover:text-white/90">
-            <span className="text-lg">◷</span>
-            <span>タイマーのモード</span>
+          <button
+            type="button"
+            onClick={() => setIsThemeModalOpen(true)}
+            className="flex flex-col items-center gap-1 px-3 py-2 rounded-xl text-white/75 text-xs hover:text-white/95 hover:bg-white/5"
+          >
+            <span className="text-lg">◼︎</span>
+            <span>テーマ</span>
           </button>
           <button
             type="button"
             onClick={enterFullscreen}
-            className="flex flex-col items-center gap-1 text-white/70 text-xs hover:text-white/90"
+            className="flex flex-col items-center gap-1 px-3 py-2 rounded-xl text-white/75 text-xs hover:text-white/95 hover:bg-white/5"
           >
             <span className="text-lg">⛶</span>
             <span>全画面</span>
@@ -935,7 +1140,7 @@ export default function Home() {
           <button
             type="button"
             onClick={() => setIsNoiseModalOpen(true)}
-            className="flex flex-col items-center gap-1 text-white/70 text-xs hover:text-white/90"
+            className="flex flex-col items-center gap-1 px-3 py-2 rounded-xl text-white/75 text-xs hover:text-white/95 hover:bg-white/5"
           >
             <span className="text-lg">♪</span>
             <span>ホワイトノイズ</span>
@@ -1233,6 +1438,7 @@ export default function Home() {
 
       {/* モーダル類 */}
       {noiseModal}
+      {themeModal}
       {stopConfirmModal}
       {taskSelector}
     </main>
