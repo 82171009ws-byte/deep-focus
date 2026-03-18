@@ -21,7 +21,6 @@ type BackgroundThemeKey =
   | "peach"
   | "lavender"
   | "sky";
-type NoiseBackgroundMode = "auto" | "manual";
 
 const SESSIONS_BEFORE_LONG = 4;
 
@@ -181,57 +180,15 @@ function getBackgroundTheme(themeKey: BackgroundThemeKey): BackgroundTheme {
   );
 }
 
-// 集中音ごとの背景テーマ
 interface NoiseTheme {
   backgroundImage: string;
   overlay: string;
 }
 
-function getNoiseTheme(
-  noiseId: string,
-  running: boolean,
-  baseTheme: BackgroundThemeKey,
-  noiseBackgroundMode: NoiseBackgroundMode
-): NoiseTheme {
+function getNoiseTheme(baseTheme: BackgroundThemeKey): NoiseTheme {
+  // 音と背景を完全に切り離す: 背景はユーザー選択テーマのみ
   const base = getBackgroundTheme(baseTheme);
-  if (noiseBackgroundMode === "manual") {
-    return { backgroundImage: base.backgroundImage, overlay: base.overlay };
-  }
-  // 停止・ポーズ時は通常背景に戻す
-  if (!running) {
-    return {
-      backgroundImage: base.backgroundImage,
-      overlay: base.overlay,
-    };
-  }
-
-  // running 中のみ「対応する集中音テーマ」がある場合に上書きする
-  switch (noiseId) {
-    case "takibi":
-      // 暖色の暗い背景
-      return {
-        backgroundImage:
-          "radial-gradient(circle at 20% 0%, #ffb347 0%, #ff7b3b 18%, #4a1b0f 48%, #050308 100%)",
-        overlay: "rgba(0,0,0,0.25)",
-      };
-    case "seseragi":
-      // 青系の静かな背景
-      return {
-        backgroundImage:
-          "linear-gradient(135deg, #021b3a 0%, #035f73 40%, #0b1b33 70%, #020611 100%)",
-        overlay: "rgba(0,0,0,0.25)",
-      };
-    case "tukutuku":
-      // ツクツクボウシ（夏の緑系背景）
-      return {
-        backgroundImage:
-          "linear-gradient(135deg, #05210f 0%, #0b4a24 35%, #0c6f34 55%, #04120a 100%)",
-        overlay: "rgba(0,0,0,0.22)",
-      };
-    default:
-      // 対応テーマがない音（なし/チクタク/秒読み/雨/カフェなど）は選択テーマを維持
-      return { backgroundImage: base.backgroundImage, overlay: base.overlay };
-  }
+  return { backgroundImage: base.backgroundImage, overlay: base.overlay };
 }
 
 interface Task {
@@ -262,7 +219,6 @@ const STORAGE_KEYS = {
   focusPreset: "focus-preset",
   dailyGoal: "focus-daily-goal",
   backgroundTheme: "focus-background-theme",
-  noiseBackgroundMode: "focus-noise-background-mode",
   streak: "focus-streak",
   showCompleted: "focus-show-completed",
 } as const;
@@ -413,13 +369,6 @@ function loadBackgroundTheme(): BackgroundThemeKey {
   return DEFAULT_BACKGROUND_THEME;
 }
 
-function loadNoiseBackgroundMode(): NoiseBackgroundMode {
-  if (typeof window === "undefined") return "auto";
-  const raw = localStorage.getItem(STORAGE_KEYS.noiseBackgroundMode);
-  if (raw === "auto" || raw === "manual") return raw;
-  return "auto";
-}
-
 function loadShowCompleted(): boolean {
   if (typeof window === "undefined") return false;
   return localStorage.getItem(STORAGE_KEYS.showCompleted) === "true";
@@ -460,9 +409,6 @@ export default function Home() {
   const [dailyGoalPomos, setDailyGoalPomos] = useState<number>(() => loadDailyGoal());
   const [backgroundTheme, setBackgroundTheme] = useState<BackgroundThemeKey>(() =>
     loadBackgroundTheme()
-  );
-  const [noiseBackgroundMode, setNoiseBackgroundMode] = useState<NoiseBackgroundMode>(() =>
-    loadNoiseBackgroundMode()
   );
 
   useEffect(() => {
@@ -507,6 +453,8 @@ export default function Home() {
             if (audioRef.current) audioRef.current.pause();
           } catch {}
           if (mode === "work") {
+            // 作業セッション終了時のみ通知音を1回鳴らす（休憩終了では鳴らさない）
+            playDing();
             setStats((s) => {
               const next = {
                 focusSeconds: s.focusSeconds + presetConfig.focusSeconds,
@@ -589,11 +537,6 @@ export default function Home() {
     localStorage.setItem(STORAGE_KEYS.backgroundTheme, backgroundTheme);
   }, [backgroundTheme]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    localStorage.setItem(STORAGE_KEYS.noiseBackgroundMode, noiseBackgroundMode);
-  }, [noiseBackgroundMode]);
-
   const syncDailyState = useCallback(() => {
     const todayKey = getTodayKey();
     if (activeDateKeyRef.current === todayKey) return;
@@ -621,7 +564,7 @@ export default function Home() {
     setSeconds(getModeSeconds(mode, focusPreset));
   }, [focusPreset, isIdle, mode]);
 
-  // ノイズ再生（選択中のみ、running のとき再生）
+  // ノイズ再生（作業中のみ）
   const noisePath = NOISE_OPTIONS.find((o) => o.id === selectedNoise)?.path ?? "";
   useEffect(() => {
     if (typeof window === "undefined" || !noisePath) {
@@ -648,17 +591,17 @@ export default function Home() {
   }, [noiseVolume]);
 
   useEffect(() => {
-    if (running && audioRef.current && noisePath) {
-      try {
+    if (!audioRef.current) return;
+    const shouldPlay = running && mode === "work" && !!noisePath;
+    try {
+      if (shouldPlay) {
         audioRef.current.currentTime = 0;
         void audioRef.current.play();
-      } catch {}
-    } else if (!running && audioRef.current) {
-      try {
+      } else {
         audioRef.current.pause();
-      } catch {}
-    }
-  }, [running, noisePath]);
+      }
+    } catch {}
+  }, [running, mode, noisePath]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -811,6 +754,16 @@ export default function Home() {
     } catch {}
   };
 
+  const playDing = useCallback(() => {
+    try {
+      const a = new Audio("/sounds/ding.mp3");
+      a.loop = false;
+      // 通知音は小さめが好みなので noiseVolume と無関係にやや控えめ
+      a.volume = 0.9;
+      void a.play();
+    } catch {}
+  }, []);
+
   const minutes = Math.floor(seconds / 60);
   const secs = seconds % 60;
   const selectedTask = selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) ?? null : null;
@@ -819,14 +772,7 @@ export default function Home() {
   const modeSeconds = getModeSeconds(mode, focusPreset);
   const elapsedRatio = seconds <= 0 ? 0 : 1 - Math.min(1, Math.max(0, seconds / modeSeconds));
 
-  const noiseTheme = getNoiseTheme(
-    selectedNoise,
-    running,
-    backgroundTheme,
-    noiseBackgroundMode
-  );
-  const currentPresetConfig = getPresetConfig(focusPreset);
-  const currentBackgroundTheme = getBackgroundTheme(backgroundTheme);
+  const noiseTheme = getNoiseTheme(backgroundTheme);
 
   const mainButtonLabel =
     isIdle
@@ -857,7 +803,7 @@ export default function Home() {
       <div className="mb-2 flex items-center justify-center gap-2 text-[11px] text-white/60">
         <span>集中時間</span>
         <span className="h-px w-8 bg-white/20" aria-hidden />
-        <span>{currentPresetConfig.label}</span>
+        <span>{getPresetConfig(focusPreset).label}</span>
       </div>
       <div className="grid grid-cols-3 gap-2">
         {FOCUS_PRESET_KEYS.map((presetKey) => {
@@ -977,33 +923,6 @@ export default function Home() {
             aria-label="閉じる"
           >
             ×
-          </button>
-        </div>
-
-        <div className="mb-4 flex items-center justify-between rounded-2xl bg-white/5 px-4 py-3 ring-1 ring-white/10">
-          <div>
-            <div className="text-sm font-semibold">音に合わせて背景を変える</div>
-            <div className="mt-0.5 text-[11px] text-white/60">
-              ON: 実行中のみ集中音テーマ / OFF: 常に選択テーマ
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() =>
-              setNoiseBackgroundMode((m) => (m === "auto" ? "manual" : "auto"))
-            }
-            className={`relative h-7 w-12 rounded-full transition ${
-              noiseBackgroundMode === "auto" ? "bg-emerald-400/60" : "bg-white/15"
-            }`}
-            aria-pressed={noiseBackgroundMode === "auto"}
-            aria-label="音に合わせて背景を変える"
-          >
-            <span
-              className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition ${
-                noiseBackgroundMode === "auto" ? "left-6" : "left-0.5"
-              }`}
-              aria-hidden
-            />
           </button>
         </div>
 
