@@ -83,17 +83,30 @@ function getModeLabel(mode: PomodoroMode): string {
   }
 }
 
-// ホワイトノイズ選択肢（id: 内部キー, label: 表示名）
-const NOISE_OPTIONS: { id: string; label: string; path: string }[] = [
-  { id: "none", label: "なし", path: "" },
-  { id: "tick", label: "チクタク", path: "/sounds/tick.mp3" },
-  { id: "count", label: "秒読み", path: "/sounds/count.mp3" },
-  { id: "tukutuku", label: "ツクツクボウシ", path: "/sounds/tukutuku.mp3" },
-  { id: "rain", label: "雨", path: "/sounds/rain.mp3" },
-  { id: "seseragi", label: "川", path: "/sounds/seseragi.mp3" },
-  { id: "takibi", label: "焚き火", path: "/sounds/takibi.mp3" },
-  { id: "cafe", label: "カフェ", path: "/sounds/cafe.mp3" },
+// ホワイトノイズ（配列順 = 表示順）。ding.mp3 は完了通知専用のため含めない。
+type SoundOption = { id: string; label: string; file: string; isPremium: boolean };
+
+const SOUND_OPTIONS: SoundOption[] = [
+  { id: "none", label: "なし", file: "", isPremium: false },
+  { id: "tukutuku", label: "ツクツクボウシ", file: "/sounds/tukutuku.mp3", isPremium: false },
+  { id: "seseragi", label: "川", file: "/sounds/seseragi.mp3", isPremium: false },
+  { id: "takibi", label: "焚き火", file: "/sounds/takibi.mp3", isPremium: false },
+  { id: "tick", label: "チクタク", file: "/sounds/tick.mp3", isPremium: true },
+  { id: "countdown", label: "秒読み", file: "/sounds/countdown.mp3", isPremium: true },
+  { id: "rain", label: "雨", file: "/sounds/rain.mp3", isPremium: true },
+  { id: "cafe", label: "カフェ", file: "/sounds/cafe.mp3", isPremium: true },
 ];
+
+/** 仮実装: 有料プラン判定が入ったらここを差し替え */
+const IS_PREMIUM_USER = false;
+
+function normalizeNoiseIdForUser(rawId: string, premiumUser: boolean): string {
+  const id = rawId === "count" ? "countdown" : rawId;
+  const opt = SOUND_OPTIONS.find((o) => o.id === id);
+  if (!opt) return "none";
+  if (opt.isPremium && !premiumUser) return "none";
+  return id;
+}
 
 interface BackgroundTheme {
   key: BackgroundThemeKey;
@@ -328,16 +341,16 @@ function loadNoise(): { selectedNoise: string; noiseVolume: number } {
     const legacyMap: Record<string, string> = {
       なし: "none",
       チクタク: "tick",
-      秒読み: "count",
+      秒読み: "countdown",
+      count: "countdown", // 旧 id（秒読み）
       こおろぎ: "tukutuku",
+      ツクツクボウシ: "tukutuku",
       雨: "rain",
       川: "seseragi",
       焚き火: "takibi",
       カフェ: "cafe",
     };
-    const candidate =
-      legacyMap[rawValue] ??
-      (NOISE_OPTIONS.some((o) => o.id === rawValue) ? rawValue : "none");
+    const candidate = normalizeNoiseIdForUser(legacyMap[rawValue] ?? rawValue, IS_PREMIUM_USER);
     const vol = typeof p?.noiseVolume === "number" && p.noiseVolume >= 0 && p.noiseVolume <= 100 ? p.noiseVolume : 70;
     return { selectedNoise: candidate, noiseVolume: vol };
   } catch {
@@ -398,6 +411,9 @@ function FlipDigit({ digit }: { digit: string }) {
 export default function Home() {
   const [timerStatus, setTimerStatus] = useState<TimerStatus>("idle");
   const [isNoiseModalOpen, setIsNoiseModalOpen] = useState(false);
+  const [isPremiumNoiseUpsellOpen, setIsPremiumNoiseUpsellOpen] = useState(false);
+  /** プレミアム CTA 仮クリック時の「近日公開」フィードバック */
+  const [showPremiumCtaComingSoon, setShowPremiumCtaComingSoon] = useState(false);
   const [isFullscreenMode, setIsFullscreenMode] = useState(false);
   const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
   const [selectedNoise, setSelectedNoise] = useState("none");
@@ -436,6 +452,16 @@ export default function Home() {
   const isRunning = timerStatus === "running";
   const isPaused = timerStatus === "paused";
   const running = isRunning;
+  /** 仮: IS_PREMIUM_USER と同期（将来コンポーネント内で動的に） */
+  const isPremiumUser = IS_PREMIUM_USER;
+
+  // 無料ユーザーなのに有料音が選ばれている場合は「なし」へ（ストレージずれ・将来のフラグ変更にも対応）
+  useEffect(() => {
+    const opt = SOUND_OPTIONS.find((o) => o.id === selectedNoise);
+    if (opt?.isPremium && !isPremiumUser) {
+      setSelectedNoise("none");
+    }
+  }, [selectedNoise, isPremiumUser]);
 
   const saveTasks = useCallback((next: Task[]) => {
     setTasks(next);
@@ -589,8 +615,13 @@ export default function Home() {
     setSeconds(getModeSeconds(mode, focusPreset));
   }, [focusPreset, isIdle, mode]);
 
-  // ノイズ再生（作業中のみ）
-  const noisePath = NOISE_OPTIONS.find((o) => o.id === selectedNoise)?.path ?? "";
+  // ノイズ再生（作業中のみ）。無料ユーザーは有料音の file を渡さない（再生ガード）
+  const noisePath = (() => {
+    const opt = SOUND_OPTIONS.find((o) => o.id === selectedNoise);
+    if (!opt?.file) return "";
+    if (opt.isPremium && !isPremiumUser) return "";
+    return opt.file;
+  })();
   useEffect(() => {
     if (typeof window === "undefined" || !noisePath) {
       audioRef.current = null;
@@ -626,7 +657,7 @@ export default function Home() {
         audioRef.current.pause();
       }
     } catch {}
-  }, [running, mode, noisePath]);
+  }, [running, mode, noisePath, isPremiumUser]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -681,12 +712,17 @@ export default function Home() {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         exitFullscreen();
-        if (isNoiseModalOpen) setIsNoiseModalOpen(false);
+        if (isPremiumNoiseUpsellOpen) setIsPremiumNoiseUpsellOpen(false);
+        else if (isNoiseModalOpen) setIsNoiseModalOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [exitFullscreen, isNoiseModalOpen]);
+  }, [exitFullscreen, isNoiseModalOpen, isPremiumNoiseUpsellOpen]);
+
+  useEffect(() => {
+    if (!isPremiumNoiseUpsellOpen) setShowPremiumCtaComingSoon(false);
+  }, [isPremiumNoiseUpsellOpen]);
 
   const handleMainButton = useCallback(() => {
     if (timerStatus === "idle") {
@@ -761,10 +797,13 @@ export default function Home() {
         JSON.stringify({ selectedNoise, noiseVolume })
       );
     }
+    setIsPremiumNoiseUpsellOpen(false);
     setIsNoiseModalOpen(false);
   };
 
-  const previewNoise = (path: string) => {
+  const previewNoise = (option: SoundOption) => {
+    if (option.isPremium && !isPremiumUser) return;
+    const path = option.file;
     try {
       if (audioRef.current) {
         audioRef.current.pause();
@@ -1158,7 +1197,10 @@ export default function Home() {
           <div className="flex min-w-0 justify-end items-center">
             <button
               type="button"
-              onClick={() => setIsNoiseModalOpen(true)}
+              onClick={() => {
+              setIsPremiumNoiseUpsellOpen(false);
+              setIsNoiseModalOpen(true);
+            }}
               className="flex flex-col items-center gap-1 px-2 sm:px-3 py-2 rounded-xl text-white/75 text-xs hover:text-white/95 hover:bg-white/5"
             >
               <span className="text-lg">♪</span>
@@ -1264,12 +1306,58 @@ export default function Home() {
     </div>
   );
 
+  const freeSoundOptions = SOUND_OPTIONS.filter((o) => !o.isPremium);
+  const premiumSoundOptions = SOUND_OPTIONS.filter((o) => o.isPremium);
+
+  const renderNoiseOptionRow = (opt: SoundOption) => {
+    const locked = opt.isPremium && !isPremiumUser;
+    return (
+      <li key={opt.id}>
+        <button
+          type="button"
+          onClick={() => {
+            if (locked) {
+              setIsPremiumNoiseUpsellOpen(true);
+              return;
+            }
+            setSelectedNoise(opt.id);
+            previewNoise(opt);
+          }}
+          className={`w-full flex items-center justify-between gap-2 px-4 py-3 rounded-xl text-left transition ${
+            locked
+              ? "opacity-70 hover:bg-white/10 cursor-pointer"
+              : selectedNoise === opt.id
+                ? "bg-white/15 ring-1 ring-white/30"
+                : "hover:bg-white/10"
+          }`}
+          aria-label={locked ? `${opt.label}（プレミアム案内を表示）` : opt.label}
+        >
+          <span>{opt.label}</span>
+          <span className="flex items-center gap-2 shrink-0">
+            {opt.isPremium && (
+              <span
+                className="rounded-md border border-amber-300/40 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-100/95"
+                aria-hidden
+              >
+                Premium
+              </span>
+            )}
+            {selectedNoise === opt.id && !locked && <span className="text-white">✓</span>}
+          </span>
+        </button>
+      </li>
+    );
+  };
+
   // ホワイトノイズモーダル
   const noiseModal = (
     <div
       className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60"
       style={{ display: isNoiseModalOpen ? "flex" : "none" }}
-      onClick={() => setIsNoiseModalOpen(false)}
+      onClick={() => {
+        setIsPremiumNoiseUpsellOpen(false);
+        setIsNoiseModalOpen(false);
+      }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="noise-modal-title"
@@ -1293,23 +1381,16 @@ export default function Home() {
           />
           <span className="text-sm text-white/60">{noiseVolume}%</span>
         </div>
-        <ul className="space-y-1 mb-6">
-          {NOISE_OPTIONS.map((opt) => (
-            <li key={opt.id}>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedNoise(opt.id);
-                  if (opt.path) previewNoise(opt.path);
-                }}
-                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-left transition ${selectedNoise === opt.id ? "bg-white/15 ring-1 ring-white/30" : "hover:bg-white/10"}`}
-              >
-                <span>{opt.label}</span>
-                {selectedNoise === opt.id && <span className="text-white">✓</span>}
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div className="mb-6 space-y-4">
+          <div>
+            <h3 className="text-xs font-medium text-white/45 mb-2 tracking-wide">無料</h3>
+            <ul className="space-y-1">{freeSoundOptions.map(renderNoiseOptionRow)}</ul>
+          </div>
+          <div className="pt-3 border-t border-white/10">
+            <h3 className="text-xs font-medium text-white/45 mb-2 tracking-wide">プレミアム</h3>
+            <ul className="space-y-1">{premiumSoundOptions.map(renderNoiseOptionRow)}</ul>
+          </div>
+        </div>
         <button
           type="button"
           onClick={saveNoise}
@@ -1317,6 +1398,81 @@ export default function Home() {
         >
           確定
         </button>
+      </div>
+    </div>
+  );
+
+  /** 有料ホワイトノイズタップ時の案内（課金導線は未接続の仮 UI） */
+  const premiumNoiseUpsellModal = (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/55 p-4"
+      style={{ display: isPremiumNoiseUpsellOpen ? "flex" : "none" }}
+      onClick={() => setIsPremiumNoiseUpsellOpen(false)}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="premium-noise-upsell-title"
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl bg-gray-900 border border-white/10 p-5 shadow-xl text-white"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 id="premium-noise-upsell-title" className="text-base font-semibold mb-2 leading-snug">
+          集中を深めるサウンドを、すべて解放
+        </h3>
+        <p className="text-sm text-white/70 mb-3 leading-relaxed">
+          プレミアムなら、作業に合わせて選べるホワイトノイズがひとまとまり。環境音で余計な雑念を減らし、スイッチを入れたように集中のリズムを整えられます。
+        </p>
+        <ul className="text-sm text-white/85 space-y-2 mb-4 pl-0 list-none">
+          <li className="flex gap-2">
+            <span className="text-emerald-400/90 shrink-0" aria-hidden>
+              ✓
+            </span>
+            <span>より集中しやすい<strong className="text-white/95 font-medium"> 追加サウンド</strong>をいつでも利用できる</span>
+          </li>
+          <li className="flex gap-2">
+            <span className="text-emerald-400/90 shrink-0" aria-hidden>
+              ✓
+            </span>
+            <span>
+              <strong className="text-white/95 font-medium">雨・カフェ・チクタク・秒読み</strong> などを今すぐ解放
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <span className="text-emerald-400/90 shrink-0" aria-hidden>
+              ✓
+            </span>
+            <span>今後リリースされる新サウンドも、<strong className="text-white/95 font-medium">プレミアムで利用予定</strong></span>
+          </li>
+        </ul>
+        {showPremiumCtaComingSoon && (
+          <p
+            className="text-center text-xs text-amber-200/90 mb-3 py-1.5 rounded-lg bg-amber-400/10 border border-amber-400/20"
+            role="status"
+          >
+            課金・登録は近日公開予定です
+          </p>
+        )}
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            className="w-full py-2.5 rounded-xl bg-white text-gray-900 text-sm font-semibold hover:bg-white/90 shadow-sm"
+            onClick={() => {
+              if (typeof window !== "undefined") {
+                console.log("[Deep Focus] Premium CTA: プレミアムについて見る（Stripe 等は未接続）");
+              }
+              setShowPremiumCtaComingSoon(true);
+            }}
+          >
+            プレミアムについて見る
+          </button>
+          <button
+            type="button"
+            className="w-full py-2.5 rounded-xl bg-white/10 border border-white/20 text-sm font-medium text-white/90 hover:bg-white/15"
+            onClick={() => setIsPremiumNoiseUpsellOpen(false)}
+          >
+            閉じる
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1473,6 +1629,7 @@ export default function Home() {
 
       {/* モーダル類 */}
       {noiseModal}
+      {premiumNoiseUpsellModal}
       {themeModal}
       {stopConfirmModal}
       {taskSelector}
