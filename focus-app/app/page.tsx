@@ -817,8 +817,8 @@ export default function Home() {
     ? "gap-3 sm:gap-4"
     : "gap-4 sm:gap-5";
   const footerClass = isPaused
-    ? "w-full max-w-lg flex items-center justify-around pt-3 pb-[max(8px,env(safe-area-inset-bottom))] px-2 border-t border-white/10"
-    : "w-full max-w-lg flex items-center justify-around pt-4 pb-[max(10px,env(safe-area-inset-bottom))] px-2 border-t border-white/10";
+    ? "w-full max-w-lg grid grid-cols-3 items-center gap-x-1 sm:gap-x-2 pt-3 pb-[max(8px,env(safe-area-inset-bottom))] px-2 border-t border-white/10"
+    : "w-full max-w-lg grid grid-cols-3 items-center gap-x-1 sm:gap-x-2 pt-4 pb-[max(10px,env(safe-area-inset-bottom))] px-2 border-t border-white/10";
   const fullscreenContentGapClass = isPaused
     ? "gap-4 px-4"
     : "gap-5 px-4";
@@ -1135,30 +1135,36 @@ export default function Home() {
 
         {/* フッター */}
         <footer className={footerClass}>
-          <button
-            type="button"
-            onClick={() => setIsThemeModalOpen(true)}
-            className="flex flex-col items-center gap-1 px-3 py-2 rounded-xl text-white/75 text-xs hover:text-white/95 hover:bg-white/5"
-          >
-            <span className="text-lg">◼︎</span>
-            <span>テーマ</span>
-          </button>
-          <button
-            type="button"
-            onClick={enterFullscreen}
-            className="flex flex-col items-center gap-1 px-3 py-2 rounded-xl text-white/75 text-xs hover:text-white/95 hover:bg-white/5"
-          >
-            <span className="text-lg">⛶</span>
-            <span>全画面</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsNoiseModalOpen(true)}
-            className="flex flex-col items-center gap-1 px-3 py-2 rounded-xl text-white/75 text-xs hover:text-white/95 hover:bg-white/5"
-          >
-            <span className="text-lg">♪</span>
-            <span>ホワイトノイズ</span>
-          </button>
+          <div className="flex min-w-0 justify-start items-center">
+            <button
+              type="button"
+              onClick={() => setIsThemeModalOpen(true)}
+              className="flex flex-col items-center gap-1 px-2 sm:px-3 py-2 rounded-xl text-white/75 text-xs hover:text-white/95 hover:bg-white/5"
+            >
+              <span className="text-lg">◼︎</span>
+              <span className="text-center leading-tight">テーマ</span>
+            </button>
+          </div>
+          <div className="flex min-w-0 justify-center items-center">
+            <button
+              type="button"
+              onClick={enterFullscreen}
+              className="flex flex-col items-center gap-1 px-2 sm:px-3 py-2 rounded-xl text-white/75 text-xs hover:text-white/95 hover:bg-white/5"
+            >
+              <span className="text-lg">⛶</span>
+              <span>全画面</span>
+            </button>
+          </div>
+          <div className="flex min-w-0 justify-end items-center">
+            <button
+              type="button"
+              onClick={() => setIsNoiseModalOpen(true)}
+              className="flex flex-col items-center gap-1 px-2 sm:px-3 py-2 rounded-xl text-white/75 text-xs hover:text-white/95 hover:bg-white/5"
+            >
+              <span className="text-lg">♪</span>
+              <span className="text-center leading-tight">ホワイトノイズ</span>
+            </button>
+          </div>
         </footer>
       </div>
     </div>
