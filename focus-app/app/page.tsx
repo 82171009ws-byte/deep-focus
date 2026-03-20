@@ -1184,6 +1184,19 @@ export default function Home() {
         aria-hidden
       />
 
+      {/* 左上: 閉じるボタン（全画面解除のみ、タイマー状態は維持） */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          exitFullscreen();
+        }}
+        className="fixed top-[max(12px,env(safe-area-inset-top))] left-[max(12px,env(safe-area-inset-left))] z-20 flex items-center justify-center w-12 h-12 min-w-[48px] min-h-[48px] rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white/90 text-xl leading-none hover:bg-white/20 hover:text-white transition"
+        aria-label="全画面を閉じる"
+      >
+        ×
+      </button>
+
       {/* 余計なUIを消し、タイマーだけ中央に大きく */}
       <div className="relative flex-1 flex items-center justify-center p-4">
         <div
