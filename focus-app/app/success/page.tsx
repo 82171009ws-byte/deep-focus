@@ -1,6 +1,17 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect } from "react";
 
 export default function CheckoutSuccessPage() {
+  useEffect(() => {
+    try {
+      localStorage.setItem("isPremiumUser", "true");
+    } catch {
+      // localStorage が使えない環境では無視（仮実装）
+    }
+  }, []);
+
   return (
     <main className="min-h-dvh flex flex-col items-center justify-center gap-4 px-4 bg-[#0b0f14] text-white">
       <h1 className="text-xl font-semibold text-center">お支払いありがとうございます</h1>

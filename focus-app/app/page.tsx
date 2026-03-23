@@ -97,15 +97,10 @@ const SOUND_OPTIONS: SoundOption[] = [
   { id: "cafe", label: "カフェ", file: "/sounds/cafe.mp3", isPremium: true },
 ];
 
-/** 仮実装: 有料プラン判定が入ったらここを差し替え */
-const IS_PREMIUM_USER = false;
-
-function normalizeNoiseIdForUser(rawId: string, premiumUser: boolean): string {
+function normalizeNoiseId(rawId: string): string {
   const id = rawId === "count" ? "countdown" : rawId;
   const opt = SOUND_OPTIONS.find((o) => o.id === id);
-  if (!opt) return "none";
-  if (opt.isPremium && !premiumUser) return "none";
-  return id;
+  return opt ? id : "none";
 }
 
 interface BackgroundTheme {
@@ -350,7 +345,7 @@ function loadNoise(): { selectedNoise: string; noiseVolume: number } {
       焚き火: "takibi",
       カフェ: "cafe",
     };
-    const candidate = normalizeNoiseIdForUser(legacyMap[rawValue] ?? rawValue, IS_PREMIUM_USER);
+    const candidate = normalizeNoiseId(legacyMap[rawValue] ?? rawValue);
     const vol = typeof p?.noiseVolume === "number" && p.noiseVolume >= 0 && p.noiseVolume <= 100 ? p.noiseVolume : 70;
     return { selectedNoise: candidate, noiseVolume: vol };
   } catch {
@@ -452,10 +447,18 @@ export default function Home() {
   const isRunning = timerStatus === "running";
   const isPaused = timerStatus === "paused";
   const running = isRunning;
-  /** 仮: IS_PREMIUM_USER と同期（将来コンポーネント内で動的に） */
-  const isPremiumUser = IS_PREMIUM_USER;
+  const [isPremiumUser, setIsPremiumUser] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("isPremiumUser") === "true";
+  });
 
-  // 無料ユーザーなのに有料音が選ばれている場合は「なし」へ（ストレージずれ・将来のフラグ変更にも対応）
+  // 念のため、マウント時に localStorage を再読込（success/cancel の遷移でも状態を整える）
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setIsPremiumUser(localStorage.getItem("isPremiumUser") === "true");
+  }, []);
+
+  // 無料ユーザーなのに有料音が選ばれている場合は「なし」へ（ストレージずれにも対応）
   useEffect(() => {
     const opt = SOUND_OPTIONS.find((o) => o.id === selectedNoise);
     if (opt?.isPremium && !isPremiumUser) {
@@ -1108,6 +1111,12 @@ export default function Home() {
       <div className="relative flex flex-1 flex-col items-center justify-between px-4 pt-6 pb-[max(14px,env(safe-area-inset-bottom))] text-white sm:pt-8 sm:pb-[max(18px,env(safe-area-inset-bottom))]">
         {/* タスク選択エリア */}
         <div className="w-full max-w-md text-center pt-1">
+          {isPremiumUser && (
+            <div className="inline-flex items-center gap-2 mb-2 text-[11px] font-semibold text-emerald-100 bg-emerald-400/10 border border-emerald-400/25 px-3 py-1 rounded-full backdrop-blur-sm">
+              <span aria-hidden>✓</span>
+              <span>プレミアム利用中</span>
+            </div>
+          )}
           <button
             type="button"
             onClick={() => setTaskDrawerOpen(true)}
@@ -1644,6 +1653,21 @@ export default function Home() {
 
       {/* 全画面モード UI */}
       {fullscreenUI}
+
+      {isPremiumUser && (
+        <button
+          type="button"
+          onClick={() => {
+            try {
+              localStorage.removeItem("isPremiumUser");
+            } catch {}
+            setIsPremiumUser(false);
+          }}
+          className="fixed z-[80] right-[max(12px,env(safe-area-inset-right))] bottom-[max(12px,env(safe-area-inset-bottom))] px-3 py-2 rounded-full text-xs font-semibold text-white/90 bg-white/10 backdrop-blur-md border border-white/20 hover:bg-white/20"
+        >
+          Premium解除（仮）
+        </button>
+      )}
 
       {/* モーダル類 */}
       {noiseModal}
