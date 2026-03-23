@@ -412,8 +412,8 @@ export default function Home() {
   const [timerStatus, setTimerStatus] = useState<TimerStatus>("idle");
   const [isNoiseModalOpen, setIsNoiseModalOpen] = useState(false);
   const [isPremiumNoiseUpsellOpen, setIsPremiumNoiseUpsellOpen] = useState(false);
-  /** プレミアム CTA 仮クリック時の「近日公開」フィードバック */
-  const [showPremiumCtaComingSoon, setShowPremiumCtaComingSoon] = useState(false);
+  const [premiumCheckoutLoading, setPremiumCheckoutLoading] = useState(false);
+  const [premiumCheckoutError, setPremiumCheckoutError] = useState<string | null>(null);
   const [isFullscreenMode, setIsFullscreenMode] = useState(false);
   const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
   const [selectedNoise, setSelectedNoise] = useState("none");
@@ -721,7 +721,10 @@ export default function Home() {
   }, [exitFullscreen, isNoiseModalOpen, isPremiumNoiseUpsellOpen]);
 
   useEffect(() => {
-    if (!isPremiumNoiseUpsellOpen) setShowPremiumCtaComingSoon(false);
+    if (!isPremiumNoiseUpsellOpen) {
+      setPremiumCheckoutError(null);
+      setPremiumCheckoutLoading(false);
+    }
   }, [isPremiumNoiseUpsellOpen]);
 
   const handleMainButton = useCallback(() => {
@@ -826,6 +829,25 @@ export default function Home() {
       a.volume = 0.9;
       void a.play();
     } catch {}
+  }, []);
+
+  /** Stripe Checkout へ（サーバーがセッション作成、秘密鍵は API のみ） */
+  const startPremiumCheckout = useCallback(async () => {
+    setPremiumCheckoutError(null);
+    setPremiumCheckoutLoading(true);
+    try {
+      const res = await fetch("/api/checkout", { method: "POST" });
+      const data = (await res.json()) as { url?: string; error?: string };
+      if (!res.ok || !data.url) {
+        setPremiumCheckoutError(data.error ?? "決済の準備に失敗しました");
+        setPremiumCheckoutLoading(false);
+        return;
+      }
+      window.location.assign(data.url);
+    } catch {
+      setPremiumCheckoutError("通信に失敗しました");
+      setPremiumCheckoutLoading(false);
+    }
   }, []);
 
   const minutes = Math.floor(seconds / 60);
@@ -1444,26 +1466,22 @@ export default function Home() {
             <span>今後リリースされる新サウンドも、<strong className="text-white/95 font-medium">プレミアムで利用予定</strong></span>
           </li>
         </ul>
-        {showPremiumCtaComingSoon && (
+        {premiumCheckoutError && (
           <p
-            className="text-center text-xs text-amber-200/90 mb-3 py-1.5 rounded-lg bg-amber-400/10 border border-amber-400/20"
-            role="status"
+            className="text-center text-xs text-red-300/95 mb-3 py-1.5 px-2 rounded-lg bg-red-500/15 border border-red-500/25 leading-snug"
+            role="alert"
           >
-            課金・登録は近日公開予定です
+            {premiumCheckoutError}
           </p>
         )}
         <div className="flex flex-col gap-2">
           <button
             type="button"
-            className="w-full py-2.5 rounded-xl bg-white text-gray-900 text-sm font-semibold hover:bg-white/90 shadow-sm"
-            onClick={() => {
-              if (typeof window !== "undefined") {
-                console.log("[Deep Focus] Premium CTA: プレミアムについて見る（Stripe 等は未接続）");
-              }
-              setShowPremiumCtaComingSoon(true);
-            }}
+            disabled={premiumCheckoutLoading}
+            className="w-full py-2.5 rounded-xl bg-white text-gray-900 text-sm font-semibold hover:bg-white/90 shadow-sm disabled:opacity-60 disabled:pointer-events-none"
+            onClick={() => void startPremiumCheckout()}
           >
-            プレミアムについて見る
+            {premiumCheckoutLoading ? "Checkout へ移動中…" : "プレミアムについて見る"}
           </button>
           <button
             type="button"
