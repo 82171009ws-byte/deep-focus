@@ -1195,24 +1195,11 @@ export default function Home() {
         aria-hidden
       />
       <div className="relative flex flex-1 flex-col items-center justify-between px-4 pt-6 pb-[max(14px,env(safe-area-inset-bottom))] text-white sm:pt-8 sm:pb-[max(18px,env(safe-area-inset-bottom))]">
-        {/* タスク選択エリア */}
-        <div className="w-full max-w-md text-center pt-1">
-          {isPremiumUser && (
-            <div className="inline-flex items-center gap-2 mb-2 text-[11px] font-semibold text-emerald-100 bg-emerald-400/10 border border-emerald-400/25 px-3 py-1 rounded-full backdrop-blur-sm">
-              <span aria-hidden>✓</span>
-              <span>プレミアム利用中</span>
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={() => setTaskDrawerOpen(true)}
-            className="text-white/90 text-sm font-medium underline decoration-white/50 underline-offset-2 hover:text-white"
-          >
-            {selectedTask ? selectedTask.text : "タスクを選んでください…"}
-          </button>
-
+        {/* ヘッダー（streak → タスク名 → タイマー円） */}
+        <div className="w-full max-w-md text-center pt-1 flex flex-col items-center gap-2">
+          {/* streak: 補助情報として最上段 */}
           <div
-            className={`inline-flex items-center gap-2 mt-2 text-[10px] font-semibold bg-white/5 border px-3 py-1 rounded-full backdrop-blur-sm ${
+            className={`inline-flex items-center gap-2 text-[10px] font-semibold bg-white/5 border px-3 py-1 rounded-full backdrop-blur-sm ${
               streak.achievedToday
                 ? "text-emerald-200/95 border-emerald-300/25"
                 : "text-white/70 border-white/10"
@@ -1223,6 +1210,23 @@ export default function Home() {
             </span>
             <span>{`連続${streak.currentStreak}日`}</span>
           </div>
+
+          {/* タスク名: 主役として中央寄せ */}
+          <button
+            type="button"
+            onClick={() => setTaskDrawerOpen(true)}
+            className="text-white/90 text-sm font-medium underline decoration-white/50 underline-offset-2 hover:text-white"
+          >
+            {selectedTask ? selectedTask.text : "タスクを選んでください…"}
+          </button>
+
+          {/* プレミアム: タスク名の直下には置かず、補助情報ブロックの一部としてまとめて表示 */}
+          {isPremiumUser && (
+            <div className="inline-flex items-center gap-2 text-[11px] font-semibold text-emerald-100 bg-emerald-400/10 border border-emerald-400/25 px-3 py-1 rounded-full backdrop-blur-sm">
+              <span aria-hidden>✓</span>
+              <span>プレミアム利用中</span>
+            </div>
+          )}
         </div>
 
         {/* 中央: タイマー + リング */}
