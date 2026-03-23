@@ -1203,8 +1203,16 @@ export default function Home() {
               <span>プレミアム利用中</span>
             </div>
           )}
+          <button
+            type="button"
+            onClick={() => setTaskDrawerOpen(true)}
+            className="text-white/90 text-sm font-medium underline decoration-white/50 underline-offset-2 hover:text-white"
+          >
+            {selectedTask ? selectedTask.text : "タスクを選んでください…"}
+          </button>
+
           <div
-            className={`inline-flex items-center gap-2 mb-2 text-[11px] font-semibold bg-white/5 border px-3 py-1 rounded-full backdrop-blur-sm ${
+            className={`inline-flex items-center gap-2 mt-2 text-[10px] font-semibold bg-white/5 border px-3 py-1 rounded-full backdrop-blur-sm ${
               streak.achievedToday
                 ? "text-emerald-200/95 border-emerald-300/25"
                 : "text-white/70 border-white/10"
@@ -1215,13 +1223,6 @@ export default function Home() {
             </span>
             <span>{`連続${streak.currentStreak}日`}</span>
           </div>
-          <button
-            type="button"
-            onClick={() => setTaskDrawerOpen(true)}
-            className="text-white/90 text-sm font-medium underline decoration-white/50 underline-offset-2 hover:text-white"
-          >
-            {selectedTask ? selectedTask.text : "タスクを選んでください…"}
-          </button>
         </div>
 
         {/* 中央: タイマー + リング */}
