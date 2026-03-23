@@ -84,17 +84,59 @@ function getModeLabel(mode: PomodoroMode): string {
 }
 
 // ホワイトノイズ（配列順 = 表示順）。ding.mp3 は完了通知専用のため含めない。
-type SoundOption = { id: string; label: string; file: string; isPremium: boolean };
+type SoundOption = { id: string; label: string; file: string; isPremium: boolean; hint?: string };
 
 const SOUND_OPTIONS: SoundOption[] = [
   { id: "none", label: "なし", file: "", isPremium: false },
-  { id: "tukutuku", label: "ツクツクボウシ", file: "/sounds/tukutuku.mp3", isPremium: false },
-  { id: "seseragi", label: "川", file: "/sounds/seseragi.mp3", isPremium: false },
-  { id: "takibi", label: "焚き火", file: "/sounds/takibi.mp3", isPremium: false },
-  { id: "tick", label: "チクタク", file: "/sounds/tick.mp3", isPremium: true },
-  { id: "countdown", label: "秒読み", file: "/sounds/countdown.mp3", isPremium: true },
-  { id: "rain", label: "雨", file: "/sounds/rain.mp3", isPremium: true },
-  { id: "cafe", label: "カフェ", file: "/sounds/cafe.mp3", isPremium: true },
+  {
+    id: "tukutuku",
+    label: "ツクツクボウシ",
+    file: "/sounds/tukutuku.mp3",
+    isPremium: false,
+    hint: "自然音",
+  },
+  {
+    id: "seseragi",
+    label: "川",
+    file: "/sounds/seseragi.mp3",
+    isPremium: false,
+    hint: "落ち着きたい時",
+  },
+  {
+    id: "takibi",
+    label: "焚き火",
+    file: "/sounds/takibi.mp3",
+    isPremium: false,
+    hint: "夜向け",
+  },
+  {
+    id: "tick",
+    label: "チクタク",
+    file: "/sounds/tick.mp3",
+    isPremium: true,
+    hint: "集中のリズム",
+  },
+  {
+    id: "countdown",
+    label: "秒読み",
+    file: "/sounds/countdown.mp3",
+    isPremium: true,
+    hint: "追い込み",
+  },
+  {
+    id: "rain",
+    label: "雨",
+    file: "/sounds/rain.mp3",
+    isPremium: true,
+    hint: "雨の日気分",
+  },
+  {
+    id: "cafe",
+    label: "カフェ",
+    file: "/sounds/cafe.mp3",
+    isPremium: true,
+    hint: "カフェ気分",
+  },
 ];
 
 function normalizeNoiseId(rawId: string): string {
@@ -217,7 +259,7 @@ interface StreakState {
   achievedToday: boolean;
 }
 
-const DEFAULT_DAILY_GOAL = 3;
+const DEFAULT_DAILY_GOAL = 4;
 
 const STORAGE_KEYS = {
   tasks: "focus-tasks",
@@ -414,6 +456,8 @@ export default function Home() {
   const [selectedNoise, setSelectedNoise] = useState("none");
   const [noiseVolume, setNoiseVolume] = useState(70);
   const [justCompletedWork, setJustCompletedWork] = useState(false);
+  const [justCompletedBreak, setJustCompletedBreak] = useState(false);
+  const [nextActionHint, setNextActionHint] = useState<string>("");
   const [isStopConfirmOpen, setIsStopConfirmOpen] = useState(false);
   const [isFullscreenControlsVisible, setIsFullscreenControlsVisible] = useState(false);
   const [focusPreset, setFocusPreset] = useState<FocusPresetKey>(() => loadFocusPreset());
@@ -485,7 +529,12 @@ export default function Home() {
           } catch {}
           if (mode === "work") {
             // 作業セッション終了時のみ通知音を1回鳴らす（休憩終了では鳴らさない）
+            const todayKey = getTodayKey();
+            const yesterdayKey = shiftDateKey(todayKey, -1);
+            // 参照キーを固定して localStorage との整合性を安定させる
+            activeDateKeyRef.current = todayKey;
             playDing();
+            const nextBreakIsLong = sessionIndex >= SESSIONS_BEFORE_LONG;
             setStats((s) => {
               const next = {
                 focusSeconds: s.focusSeconds + presetConfig.focusSeconds,
@@ -493,20 +542,20 @@ export default function Home() {
               };
               if (typeof window !== "undefined") {
                 localStorage.setItem(
-                  STORAGE_KEYS.stats(getTodayKey()),
+                  STORAGE_KEYS.stats(todayKey),
                   JSON.stringify(next)
                 );
               }
               // 作業セッション完了時だけ、軽い完了演出フラグを立てる
               setJustCompletedWork(true);
+              setJustCompletedBreak(false);
+              setNextActionHint(nextBreakIsLong ? "長めの休憩に入ります" : "短い休憩に入ります");
               return next;
             });
             setStreak((prev) => {
-              const todayKey = getTodayKey();
               if (prev.lastAchievedDate === todayKey && prev.achievedToday) {
                 return prev;
               }
-              const yesterdayKey = shiftDateKey(todayKey, -1);
               const nextCurrentStreak =
                 prev.lastAchievedDate === yesterdayKey ? prev.currentStreak + 1 : 1;
               return {
@@ -536,6 +585,9 @@ export default function Home() {
           } else {
             setMode("work");
             setSeconds(presetConfig.focusSeconds);
+            setJustCompletedWork(false);
+            setJustCompletedBreak(true);
+            setNextActionHint("作業に戻ります");
             if (mode === "longBreak") setSessionIndex(1);
           }
           return 0;
@@ -552,6 +604,18 @@ export default function Home() {
     const id = setTimeout(() => setJustCompletedWork(false), 2200);
     return () => clearTimeout(id);
   }, [justCompletedWork]);
+
+  useEffect(() => {
+    if (!justCompletedBreak) return;
+    const id = setTimeout(() => setJustCompletedBreak(false), 2200);
+    return () => clearTimeout(id);
+  }, [justCompletedBreak]);
+
+  useEffect(() => {
+    if (!justCompletedWork && !justCompletedBreak) return;
+    const id = setTimeout(() => setNextActionHint(""), 2200);
+    return () => clearTimeout(id);
+  }, [justCompletedWork, justCompletedBreak]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -928,20 +992,51 @@ export default function Home() {
   const renderTodaySummary = (wrapperClassName: string) => (
     <div className={wrapperClassName}>
       <div className="grid grid-cols-3 gap-2">
-        <div className="rounded-2xl bg-white/10 px-3 py-2 text-center backdrop-blur-sm">
-          <div className="text-[10px] text-white/55">今日の集中時間</div>
-          <div className="mt-1 text-sm font-semibold text-white tabular-nums">
+        <div className="rounded-2xl bg-white/10 px-4 py-3 text-center backdrop-blur-sm border border-white/10">
+          <div className="text-[11px] text-white/60">今日の集中時間</div>
+          <div
+            className={`mt-1 font-semibold text-white tabular-nums transition-transform duration-300 ${
+              justCompletedWork ? "scale-[1.03]" : ""
+            }`}
+            style={{ fontSize: "clamp(18px,4.2vw,24px)" }}
+          >
             {formatDurationLabel(stats.focusSeconds)}
           </div>
         </div>
         <div
-          className={`rounded-2xl bg-white/10 px-3 py-2 text-center backdrop-blur-sm transition-transform duration-500 ${
+          className={`rounded-2xl bg-white/10 px-4 py-3 text-center backdrop-blur-sm border border-white/10 transition-transform duration-500 ${
             justCompletedWork ? "scale-[1.03] bg-white/20" : ""
+          } ${stats.completedPomos >= dailyGoalPomos ? "border-emerald-300/35 bg-emerald-300/5" : ""} ${
+            !justCompletedWork &&
+            stats.completedPomos < dailyGoalPomos &&
+            dailyGoalPomos - stats.completedPomos === 1
+              ? "scale-[1.02] border-amber-300/55 bg-amber-300/8"
+              : ""
           }`}
         >
-          <div className="text-[10px] text-white/55">完了ポモ数</div>
-          <div className={`mt-1 text-sm font-semibold text-white tabular-nums ${justCompletedWork ? "animate-pulse" : ""}`}>
+          <div className="text-[11px] text-white/60">完了ポモ数</div>
+          <div
+            className={`mt-1 font-semibold text-white tabular-nums ${
+              justCompletedWork ? "animate-pulse" : ""
+            }`}
+            style={{ fontSize: "clamp(18px,4.2vw,24px)" }}
+          >
             {stats.completedPomos}
+          </div>
+          <div
+            className={`mt-1 text-[11px] tabular-nums ${
+              stats.completedPomos >= dailyGoalPomos
+                ? "text-emerald-200/90"
+                : dailyGoalPomos - stats.completedPomos === 1
+                  ? "text-amber-200/90"
+                  : "text-white/60"
+            }`}
+          >
+            {stats.completedPomos >= dailyGoalPomos
+              ? "今日の目標達成！"
+              : dailyGoalPomos - stats.completedPomos === 1
+                ? "あと1ポモで目標達成"
+                : `目標まであと${Math.max(0, dailyGoalPomos - stats.completedPomos)}ポモ`}
           </div>
         </div>
         <div
@@ -968,21 +1063,12 @@ export default function Home() {
               {stats.completedPomos} / {dailyGoalPomos}
             </div>
           </div>
-          <label className="flex items-center gap-2 text-[10px] text-white/55">
-            <span>目標変更</span>
-            <select
-              value={dailyGoalPomos}
-              onChange={(e) => setDailyGoalPomos(Number(e.target.value))}
-              className="rounded-full bg-white/10 px-2 py-1 text-xs text-white outline-none ring-1 ring-white/15"
-              aria-label="今日の目標ポモ数"
-            >
-              {Array.from({ length: 20 }, (_, index) => index + 1).map((value) => (
-                <option key={value} value={value} className="text-gray-900">
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="text-right">
+            <div className="text-[10px] text-white/55">目標値</div>
+            <div className={`mt-1 text-sm font-semibold text-white/90 tabular-nums ${stats.completedPomos >= dailyGoalPomos ? "text-emerald-200/90" : ""}`}>
+              {dailyGoalPomos}ポモ
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1117,6 +1203,18 @@ export default function Home() {
               <span>プレミアム利用中</span>
             </div>
           )}
+          <div
+            className={`inline-flex items-center gap-2 mb-2 text-[11px] font-semibold bg-white/5 border px-3 py-1 rounded-full backdrop-blur-sm ${
+              streak.achievedToday
+                ? "text-emerald-200/95 border-emerald-300/25"
+                : "text-white/70 border-white/10"
+            }`}
+          >
+            <span aria-hidden className="text-white/60">
+              ↻
+            </span>
+            <span>{`連続${streak.currentStreak}日`}</span>
+          </div>
           <button
             type="button"
             onClick={() => setTaskDrawerOpen(true)}
@@ -1141,6 +1239,16 @@ export default function Home() {
                 aria-hidden
               />
             )}
+            {justCompletedWork && (
+              <div
+                className="absolute inset-0 rounded-full animate-pulse"
+                style={{
+                  background:
+                    "radial-gradient(circle at 50% 50%, rgba(16,185,129,0.22) 0%, rgba(16,185,129,0.08) 35%, rgba(0,0,0,0) 60%)",
+                }}
+                aria-hidden
+              />
+            )}
             <div
               className="absolute inset-0 rounded-full border-2 border-transparent"
               style={{
@@ -1158,7 +1266,19 @@ export default function Home() {
           {/* 作業セッション完了メッセージ */}
           {justCompletedWork && (
             <div className="mt-0.5 text-xs text-emerald-50/90 bg-white/10 px-3 py-1 rounded-full backdrop-blur-sm transition-opacity duration-500 animate-pulse">
-              1セッション完了
+              <div className="text-[12px] font-semibold text-white/95 leading-tight">集中、完了！</div>
+              <div className="mt-0.5 text-[11px] text-white/70 tabular-nums">
+                今日 {stats.completedPomos}ポモ目
+              </div>
+              {nextActionHint && (
+                <div className="mt-0.5 text-[11px] text-white/75">{nextActionHint}</div>
+              )}
+            </div>
+          )}
+
+          {justCompletedBreak && (
+            <div className="mt-0.5 text-xs text-white/75 bg-white/10 px-3 py-1 rounded-full backdrop-blur-sm transition-opacity duration-500">
+              {nextActionHint || "作業に戻ります"}
             </div>
           )}
 
@@ -1363,7 +1483,18 @@ export default function Home() {
           }`}
           aria-label={locked ? `${opt.label}（プレミアム案内を表示）` : opt.label}
         >
-          <span>{opt.label}</span>
+          <span className="flex flex-col items-start min-w-0">
+            <span className="leading-tight">{opt.label}</span>
+            {opt.hint && (
+              <span
+                className={`mt-0.5 text-[10px] leading-tight ${
+                  locked ? "text-white/45" : "text-white/60"
+                }`}
+              >
+                {opt.hint}
+              </span>
+            )}
+          </span>
           <span className="flex items-center gap-2 shrink-0">
             {opt.isPremium && (
               <span
