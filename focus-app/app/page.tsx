@@ -367,13 +367,18 @@ function loadSelectedTaskId(): string | null {
   return localStorage.getItem(STORAGE_KEYS.selectedTask);
 }
 
-function loadNoise(): { selectedNoise: string; noiseVolume: number } {
-  if (typeof window === "undefined") return { selectedNoise: "none", noiseVolume: 70 };
+function loadNoise(): {
+  selectedNoise: string;
+  selectedNoise2: string;
+  noiseVolume: number;
+} {
+  if (typeof window === "undefined") return { selectedNoise: "none", selectedNoise2: "none", noiseVolume: 70 };
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.noise);
-    if (!raw) return { selectedNoise: "none", noiseVolume: 70 };
-    const p = JSON.parse(raw) as { selectedNoise?: string; noiseVolume?: number };
+    if (!raw) return { selectedNoise: "none", selectedNoise2: "none", noiseVolume: 70 };
+    const p = JSON.parse(raw) as { selectedNoise?: string; selectedNoise2?: string; noiseVolume?: number };
     const rawValue = typeof p?.selectedNoise === "string" ? p.selectedNoise : "none";
+    const rawValue2 = typeof p?.selectedNoise2 === "string" ? p.selectedNoise2 : "none";
     // 旧バージョンで保存していた「表示名」→ 内部キーへのマッピング
     const legacyMap: Record<string, string> = {
       なし: "none",
@@ -388,10 +393,11 @@ function loadNoise(): { selectedNoise: string; noiseVolume: number } {
       カフェ: "cafe",
     };
     const candidate = normalizeNoiseId(legacyMap[rawValue] ?? rawValue);
+    const candidate2 = normalizeNoiseId(legacyMap[rawValue2] ?? rawValue2);
     const vol = typeof p?.noiseVolume === "number" && p.noiseVolume >= 0 && p.noiseVolume <= 100 ? p.noiseVolume : 70;
-    return { selectedNoise: candidate, noiseVolume: vol };
+    return { selectedNoise: candidate, selectedNoise2: candidate2 === candidate ? "none" : candidate2, noiseVolume: vol };
   } catch {
-    return { selectedNoise: "none", noiseVolume: 70 };
+    return { selectedNoise: "none", selectedNoise2: "none", noiseVolume: 70 };
   }
 }
 
@@ -454,6 +460,7 @@ export default function Home() {
   const [isFullscreenMode, setIsFullscreenMode] = useState(false);
   const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
   const [selectedNoise, setSelectedNoise] = useState("none");
+  const [selectedNoise2, setSelectedNoise2] = useState("none");
   const [noiseVolume, setNoiseVolume] = useState(70);
   const [justCompletedWork, setJustCompletedWork] = useState(false);
   const [justCompletedBreak, setJustCompletedBreak] = useState(false);
@@ -468,8 +475,9 @@ export default function Home() {
   );
 
   useEffect(() => {
-    const { selectedNoise: s, noiseVolume: v } = loadNoise();
+    const { selectedNoise: s, selectedNoise2: s2, noiseVolume: v } = loadNoise();
     setSelectedNoise(s);
+    setSelectedNoise2(s2);
     setNoiseVolume(v);
   }, []);
 
@@ -483,7 +491,7 @@ export default function Home() {
   const [showCompletedTasks, setShowCompletedTasks] = useState(() => loadShowCompleted());
 
   const fullscreenRef = useRef<HTMLDivElement>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioRefs = useRef<HTMLAudioElement[]>([]);
   const fullscreenControlsHideTimeoutRef = useRef<number | null>(null);
   const activeDateKeyRef = useRef(getTodayKey());
 
@@ -502,13 +510,21 @@ export default function Home() {
     setIsPremiumUser(localStorage.getItem("isPremiumUser") === "true");
   }, []);
 
-  // 無料ユーザーなのに有料音が選ばれている場合は「なし」へ（ストレージずれにも対応）
+  // 無料ユーザーは「1つだけ」選べる。プレミアム音は選べない（ストレージずれにも対応）
   useEffect(() => {
-    const opt = SOUND_OPTIONS.find((o) => o.id === selectedNoise);
-    if (opt?.isPremium && !isPremiumUser) {
+    if (isPremiumUser) return;
+
+    // 2つ目が残っていたら 1つに畳む（1つ目がnoneなら2つ目を昇格）
+    if (selectedNoise === "none" && selectedNoise2 !== "none") {
+      setSelectedNoise(selectedNoise2);
+    }
+    if (selectedNoise2 !== "none") setSelectedNoise2("none");
+
+    const primaryOpt = SOUND_OPTIONS.find((o) => o.id === selectedNoise);
+    if (primaryOpt?.isPremium) {
       setSelectedNoise("none");
     }
-  }, [selectedNoise, isPremiumUser]);
+  }, [isPremiumUser, selectedNoise, selectedNoise2]);
 
   const saveTasks = useCallback((next: Task[]) => {
     setTasks(next);
@@ -525,7 +541,11 @@ export default function Home() {
           clearInterval(t);
           setTimerStatus("idle");
           try {
-            if (audioRef.current) audioRef.current.pause();
+            audioRefs.current.forEach((a) => {
+              try {
+                a.pause();
+              } catch {}
+            });
           } catch {}
           if (mode === "work") {
             // 作業セッション終了時のみ通知音を1回鳴らす（休憩終了では鳴らさない）
@@ -682,49 +702,61 @@ export default function Home() {
     setSeconds(getModeSeconds(mode, focusPreset));
   }, [focusPreset, isIdle, mode]);
 
-  // ノイズ再生（作業中のみ）。無料ユーザーは有料音の file を渡さない（再生ガード）
-  const noisePath = (() => {
-    const opt = SOUND_OPTIONS.find((o) => o.id === selectedNoise);
-    if (!opt?.file) return "";
-    if (opt.isPremium && !isPremiumUser) return "";
-    return opt.file;
+  // ノイズ再生（作業中のみ）
+  // - 無料: 1つのみ
+  // - プレミアム: 最大2つを同時再生（均等割り当て）
+  const noiseFilesKeyInfo = (() => {
+    const ids = (isPremiumUser ? [selectedNoise, selectedNoise2] : [selectedNoise]).filter(
+      (id) => id && id !== "none"
+    );
+    const allowedIds: string[] = [];
+    for (const id of ids) {
+      const opt = SOUND_OPTIONS.find((o) => o.id === id);
+      if (!opt?.file) continue;
+      if (opt.isPremium && !isPremiumUser) continue;
+      if (!allowedIds.includes(id)) allowedIds.push(id);
+    }
+    const files = allowedIds
+      .map((id) => SOUND_OPTIONS.find((o) => o.id === id)?.file ?? "")
+      .filter(Boolean);
+    return { allowedIds, files, key: files.join("|") };
   })();
-  useEffect(() => {
-    if (typeof window === "undefined" || !noisePath) {
-      audioRef.current = null;
-      return;
-    }
-    try {
-      const audio = new Audio(noisePath);
-      audio.loop = true;
-      audio.volume = noiseVolume / 100;
-      audioRef.current = audio;
-      return () => {
-        try {
-          audio.pause();
-        } catch {}
-      };
-    } catch {
-      audioRef.current = null;
-    }
-  }, [noisePath, noiseVolume]);
 
   useEffect(() => {
-    if (audioRef.current) audioRef.current.volume = noiseVolume / 100;
-  }, [noiseVolume]);
+    if (typeof window === "undefined") return;
 
-  useEffect(() => {
-    if (!audioRef.current) return;
-    const shouldPlay = running && mode === "work" && !!noisePath;
+    // いったん全部止めて作り直す（簡易実装）
+    audioRefs.current.forEach((a) => {
+      try {
+        a.pause();
+      } catch {}
+    });
+    audioRefs.current = [];
+
+    if (!noiseFilesKeyInfo.files.length) return;
+
     try {
+      const perVolume = (noiseVolume / 100) / noiseFilesKeyInfo.files.length;
+      audioRefs.current = noiseFilesKeyInfo.files.map((path) => {
+        const audio = new Audio(path);
+        audio.loop = true;
+        audio.volume = perVolume;
+        return audio;
+      });
+
+      const shouldPlay = running && mode === "work";
       if (shouldPlay) {
-        audioRef.current.currentTime = 0;
-        void audioRef.current.play();
-      } else {
-        audioRef.current.pause();
+        audioRefs.current.forEach((a) => {
+          try {
+            a.currentTime = 0;
+            void a.play();
+          } catch {}
+        });
       }
-    } catch {}
-  }, [running, mode, noisePath, isPremiumUser]);
+    } catch {
+      audioRefs.current = [];
+    }
+  }, [noiseFilesKeyInfo.key, noiseFilesKeyInfo.files.length, noiseVolume, running, mode, isPremiumUser]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -822,10 +854,12 @@ export default function Home() {
     setJustCompletedWork(false);
     setIsStopConfirmOpen(false);
     try {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-      }
+      audioRefs.current.forEach((a) => {
+        try {
+          a.pause();
+          a.currentTime = 0;
+        } catch {}
+      });
     } catch {}
   }, [mode, focusPreset]);
 
@@ -864,7 +898,11 @@ export default function Home() {
     if (typeof window !== "undefined") {
       localStorage.setItem(
         STORAGE_KEYS.noise,
-        JSON.stringify({ selectedNoise, noiseVolume })
+        JSON.stringify({
+          selectedNoise,
+          selectedNoise2: isPremiumUser ? selectedNoise2 : "none",
+          noiseVolume,
+        })
       );
     }
     setIsPremiumNoiseUpsellOpen(false);
@@ -875,10 +913,12 @@ export default function Home() {
     if (option.isPremium && !isPremiumUser) return;
     const path = option.file;
     try {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-      }
+      audioRefs.current.forEach((a) => {
+        try {
+          a.pause();
+          a.currentTime = 0;
+        } catch {}
+      });
       if (!path) return;
       const a = new Audio(path);
       a.volume = noiseVolume / 100;
@@ -1465,8 +1505,19 @@ export default function Home() {
   const freeSoundOptions = SOUND_OPTIONS.filter((o) => !o.isPremium);
   const premiumSoundOptions = SOUND_OPTIONS.filter((o) => o.isPremium);
 
+  const selectedLabel1 = SOUND_OPTIONS.find((o) => o.id === selectedNoise)?.label ?? "なし";
+  const selectedLabel2 =
+    SOUND_OPTIONS.find((o) => o.id === selectedNoise2)?.label ?? "なし";
+
+  const selectedMixSummary = (() => {
+    if (selectedNoise === "none") return "選択中: なし";
+    if (selectedNoise2 === "none") return `選択中: ${selectedLabel1}`;
+    return `選択中: ${selectedLabel1} + ${selectedLabel2}`;
+  })();
+
   const renderNoiseOptionRow = (opt: SoundOption) => {
     const locked = opt.isPremium && !isPremiumUser;
+    const isSelected = opt.id === selectedNoise || (selectedNoise2 !== "none" && opt.id === selectedNoise2);
     return (
       <li key={opt.id}>
         <button
@@ -1476,13 +1527,47 @@ export default function Home() {
               setIsPremiumNoiseUpsellOpen(true);
               return;
             }
-            setSelectedNoise(opt.id);
+
+            if (opt.id === "none") {
+              setSelectedNoise("none");
+              setSelectedNoise2("none");
+              previewNoise(opt);
+              return;
+            }
+
+            if (!isPremiumUser) {
+              setSelectedNoise(opt.id);
+              setSelectedNoise2("none");
+              previewNoise(opt);
+              return;
+            }
+
+            // プレミアム: 最大2つを同時選択
+            if (opt.id === selectedNoise) {
+              if (selectedNoise2 !== "none") {
+                setSelectedNoise(selectedNoise2);
+                setSelectedNoise2("none");
+              } else {
+                setSelectedNoise("none");
+              }
+            } else if (opt.id === selectedNoise2) {
+              setSelectedNoise2("none");
+            } else {
+              if (selectedNoise === "none") {
+                setSelectedNoise(opt.id);
+              } else if (selectedNoise2 === "none") {
+                setSelectedNoise2(opt.id);
+              } else {
+                // 3つ目は「2つ目」を置き換え（簡易）
+                setSelectedNoise2(opt.id);
+              }
+            }
             previewNoise(opt);
           }}
           className={`w-full flex items-center justify-between gap-2 px-4 py-3 rounded-xl text-left transition ${
             locked
               ? "opacity-70 hover:bg-white/10 cursor-pointer"
-              : selectedNoise === opt.id
+              : isSelected
                 ? "bg-white/15 ring-1 ring-white/30"
                 : "hover:bg-white/10"
           }`}
@@ -1509,7 +1594,18 @@ export default function Home() {
                 Premium
               </span>
             )}
-            {selectedNoise === opt.id && !locked && <span className="text-white">✓</span>}
+            <span
+              className={`w-4 h-4 rounded border flex items-center justify-center ${
+                isSelected && !locked
+                  ? "border-emerald-300/60 bg-emerald-300/15"
+                  : "border-white/20 bg-transparent"
+              }`}
+              aria-hidden
+            >
+              {isSelected && !locked ? (
+                <span className="text-[10px] text-white/90 leading-none">✓</span>
+              ) : null}
+            </span>
           </span>
         </button>
       </li>
@@ -1548,6 +1644,9 @@ export default function Home() {
           />
           <span className="text-sm text-white/60">{noiseVolume}%</span>
         </div>
+        <div className="mb-4">
+          <div className="text-[11px] text-white/60">{selectedMixSummary}</div>
+        </div>
         <div className="mb-6 space-y-4">
           <div>
             <h3 className="text-xs font-medium text-white/45 mb-2 tracking-wide">無料</h3>
@@ -1555,6 +1654,11 @@ export default function Home() {
           </div>
           <div className="pt-3 border-t border-white/10">
             <h3 className="text-xs font-medium text-white/45 mb-2 tracking-wide">プレミアム</h3>
+            {isPremiumUser && selectedNoise !== "none" && selectedNoise2 !== "none" && (
+              <p className="text-[10px] text-amber-200/85 mb-2 leading-snug">
+                3つ目を選ぶと2つ目が置き換わります
+              </p>
+            )}
             <ul className="space-y-1">{premiumSoundOptions.map(renderNoiseOptionRow)}</ul>
           </div>
         </div>
@@ -1595,6 +1699,12 @@ export default function Home() {
               ✓
             </span>
             <span>より集中しやすい<strong className="text-white/95 font-medium"> 追加サウンド</strong>をいつでも利用できる</span>
+          </li>
+          <li className="flex gap-2">
+            <span className="text-emerald-400/90 shrink-0" aria-hidden>
+              ✓
+            </span>
+            <span>2つの環境音を<strong className="text-white/95 font-medium">同時に再生</strong>できます</span>
           </li>
           <li className="flex gap-2">
             <span className="text-emerald-400/90 shrink-0" aria-hidden>
