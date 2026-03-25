@@ -83,8 +83,16 @@ function getModeLabel(mode: PomodoroMode): string {
   }
 }
 
-// ホワイトノイズ（配列順 = 表示順）。ding.mp3 は完了通知専用のため含めない。
-type SoundOption = { id: string; label: string; file: string; isPremium: boolean; hint?: string };
+// ホワイトノイズ（配列順 = 同一カテゴリ内の表示順）。ding.mp3 は完了通知専用のため含めない。
+type SoundOption = {
+  id: string;
+  label: string;
+  file: string;
+  isPremium: boolean;
+  hint?: string;
+  /** プレミアムのみ: モーダルでのカテゴリ（環境音 / 集中トーン） */
+  premiumGroup?: "ambient" | "focus";
+};
 
 const SOUND_OPTIONS: SoundOption[] = [
   { id: "none", label: "なし", file: "", isPremium: false },
@@ -109,25 +117,13 @@ const SOUND_OPTIONS: SoundOption[] = [
     isPremium: false,
     hint: "夜向け",
   },
-  {
-    id: "tick",
-    label: "チクタク",
-    file: "/sounds/tick.mp3",
-    isPremium: true,
-    hint: "集中のリズム",
-  },
-  {
-    id: "countdown",
-    label: "秒読み",
-    file: "/sounds/countdown.mp3",
-    isPremium: true,
-    hint: "追い込み",
-  },
+  // プレミアム・環境音
   {
     id: "rain",
     label: "雨",
     file: "/sounds/rain.mp3",
     isPremium: true,
+    premiumGroup: "ambient",
     hint: "雨の日気分",
   },
   {
@@ -135,7 +131,57 @@ const SOUND_OPTIONS: SoundOption[] = [
     label: "カフェ",
     file: "/sounds/cafe.mp3",
     isPremium: true,
+    premiumGroup: "ambient",
     hint: "カフェ気分",
+  },
+  {
+    id: "typing",
+    label: "タイピング",
+    file: "/sounds/typing.mp3",
+    isPremium: true,
+    premiumGroup: "ambient",
+    hint: "作業音",
+  },
+  {
+    id: "library",
+    label: "図書館",
+    file: "/sounds/library.mp3",
+    isPremium: true,
+    premiumGroup: "ambient",
+    hint: "静かな空間",
+  },
+  {
+    id: "ocean",
+    label: "海",
+    file: "/sounds/ocean.mp3",
+    isPremium: true,
+    premiumGroup: "ambient",
+    hint: "リラックス",
+  },
+  // プレミアム・集中トーン
+  {
+    id: "tick",
+    label: "チクタク",
+    file: "/sounds/tick.mp3",
+    isPremium: true,
+    premiumGroup: "focus",
+    hint: "集中のリズム",
+  },
+  {
+    id: "countdown",
+    label: "秒読み",
+    file: "/sounds/countdown.mp3",
+    isPremium: true,
+    premiumGroup: "focus",
+    hint: "追い込み",
+  },
+  {
+    id: "focus528hz",
+    label: "528Hzトーン",
+    file: "/sounds/focus-528hz.mp3",
+    isPremium: true,
+    premiumGroup: "focus",
+    hint: "静かな持続音",
   },
 ];
 
@@ -1503,7 +1549,8 @@ export default function Home() {
   );
 
   const freeSoundOptions = SOUND_OPTIONS.filter((o) => !o.isPremium);
-  const premiumSoundOptions = SOUND_OPTIONS.filter((o) => o.isPremium);
+  const premiumAmbientSoundOptions = SOUND_OPTIONS.filter((o) => o.premiumGroup === "ambient");
+  const premiumFocusSoundOptions = SOUND_OPTIONS.filter((o) => o.premiumGroup === "focus");
 
   const selectedLabel1 = SOUND_OPTIONS.find((o) => o.id === selectedNoise)?.label ?? "なし";
   const selectedLabel2 =
@@ -1629,10 +1676,13 @@ export default function Home() {
         className="w-full max-w-md max-h-[85vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-gray-900 text-white p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 id="noise-modal-title" className="text-lg font-semibold mb-4">
+        <h2 id="noise-modal-title" className="text-lg font-semibold mb-3">
           ホワイトノイズ
         </h2>
-        <div className="mb-4">
+        <div className="mb-4 rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2">
+          <p className="text-[11px] text-white/70 leading-snug">{selectedMixSummary}</p>
+        </div>
+        <div className="mb-5">
           <label className="block text-sm text-white/70 mb-2">音量</label>
           <input
             type="range"
@@ -1644,22 +1694,25 @@ export default function Home() {
           />
           <span className="text-sm text-white/60">{noiseVolume}%</span>
         </div>
-        <div className="mb-4">
-          <div className="text-[11px] text-white/60">{selectedMixSummary}</div>
-        </div>
         <div className="mb-6 space-y-4">
           <div>
             <h3 className="text-xs font-medium text-white/45 mb-2 tracking-wide">無料</h3>
             <ul className="space-y-1">{freeSoundOptions.map(renderNoiseOptionRow)}</ul>
           </div>
-          <div className="pt-3 border-t border-white/10">
-            <h3 className="text-xs font-medium text-white/45 mb-2 tracking-wide">プレミアム</h3>
+          <div className="pt-3 border-t border-white/10 space-y-4">
             {isPremiumUser && selectedNoise !== "none" && selectedNoise2 !== "none" && (
-              <p className="text-[10px] text-amber-200/85 mb-2 leading-snug">
+              <p className="text-[10px] text-white/45 leading-snug">
                 3つ目を選ぶと2つ目が置き換わります
               </p>
             )}
-            <ul className="space-y-1">{premiumSoundOptions.map(renderNoiseOptionRow)}</ul>
+            <div>
+              <h3 className="text-xs font-medium text-white/45 mb-2 tracking-wide">プレミアム・環境音</h3>
+              <ul className="space-y-1">{premiumAmbientSoundOptions.map(renderNoiseOptionRow)}</ul>
+            </div>
+            <div className="pt-3 border-t border-white/10">
+              <h3 className="text-xs font-medium text-white/45 mb-2 tracking-wide">プレミアム・集中トーン</h3>
+              <ul className="space-y-1">{premiumFocusSoundOptions.map(renderNoiseOptionRow)}</ul>
+            </div>
           </div>
         </div>
         <button
