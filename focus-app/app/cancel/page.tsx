@@ -2,14 +2,11 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
+import { writeLocalPremium } from "@/lib/userProfile";
 
 export default function CheckoutCancelPage() {
   useEffect(() => {
-    try {
-      localStorage.removeItem("isPremiumUser");
-    } catch {
-      // ローカルストレージが利用できない環境では無視（仮実装）
-    }
+    writeLocalPremium(false);
   }, []);
 
   return (

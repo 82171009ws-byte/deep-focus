@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import { upsertUserPremium, writeLocalPremium } from "@/lib/userProfile";
 
 export default function CheckoutSuccessPage() {
   useEffect(() => {
-    try {
-      localStorage.setItem("isPremiumUser", "true");
-    } catch {
-      // localStorage が使えない環境では無視（仮実装）
-    }
+    writeLocalPremium(true);
+    void supabase.auth.getSession().then(({ data: { session } }) => {
+      const uid = session?.user?.id;
+      if (uid) void upsertUserPremium(uid, true);
+    });
   }, []);
 
   return (

@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabaseClient";
+import { fetchUserPremium, readLocalPremium, upsertUserPremium, writeLocalPremium } from "@/lib/userProfile";
 
 // -----------------------------------------------------------------------------
 // Types
@@ -498,6 +501,7 @@ function FlipDigit({ digit }: { digit: string }) {
 // -----------------------------------------------------------------------------
 
 export default function Home() {
+  const router = useRouter();
   const [timerStatus, setTimerStatus] = useState<TimerStatus>("idle");
   const [isNoiseModalOpen, setIsNoiseModalOpen] = useState(false);
   const [isPremiumNoiseUpsellOpen, setIsPremiumNoiseUpsellOpen] = useState(false);
@@ -527,6 +531,68 @@ export default function Home() {
     setNoiseVolume(v);
   }, []);
 
+  // Supabase Auth + プレミアム: ログイン中は DB 優先、未ログインは localStorage
+  useEffect(() => {
+    let mounted = true;
+    setAuthLoading(true);
+
+    const syncPremium = (session: { user?: { id?: string } } | null) => {
+      if (!mounted) return;
+      const uid = session?.user?.id;
+      if (uid) {
+        void fetchUserPremium(uid).then((premium) => {
+          if (!mounted) return;
+          setIsPremiumUser(premium);
+        });
+      } else {
+        setIsPremiumUser(readLocalPremium());
+      }
+    };
+
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (!mounted) return;
+        const session = data.session ?? null;
+        setAuthEmail(session?.user?.email ?? null);
+        syncPremium(session);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setAuthEmail(null);
+        setIsPremiumUser(readLocalPremium());
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setAuthLoading(false);
+      });
+
+    let subscription: { unsubscribe: () => void } | null = null;
+    try {
+      const onAuth = supabase.auth.onAuthStateChange((_event, session) => {
+        if (!mounted) return;
+        setAuthEmail(session?.user?.email ?? null);
+        syncPremium(session);
+      });
+      subscription = onAuth.data.subscription;
+    } catch {
+      subscription = null;
+    }
+
+    return () => {
+      mounted = false;
+      subscription?.unsubscribe();
+    };
+  }, []);
+
+  const handleLogout = useCallback(async () => {
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      router.push("/");
+    }
+  }, [router]);
+
   const [mode, setMode] = useState<PomodoroMode>("work");
   const [seconds, setSeconds] = useState(() => getModeSeconds("work", loadFocusPreset()));
   const [sessionIndex, setSessionIndex] = useState(1);
@@ -535,6 +601,10 @@ export default function Home() {
   const [stats, setStats] = useState<DailyStats>(() => loadStats());
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(() => loadSelectedTaskId());
   const [showCompletedTasks, setShowCompletedTasks] = useState(() => loadShowCompleted());
+
+  // Supabase Auth（メール+パスワード）
+  const [authEmail, setAuthEmail] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
   const fullscreenRef = useRef<HTMLDivElement>(null);
   const audioRefs = useRef<HTMLAudioElement[]>([]);
@@ -545,16 +615,7 @@ export default function Home() {
   const isRunning = timerStatus === "running";
   const isPaused = timerStatus === "paused";
   const running = isRunning;
-  const [isPremiumUser, setIsPremiumUser] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem("isPremiumUser") === "true";
-  });
-
-  // 念のため、マウント時に localStorage を再読込（success/cancel の遷移でも状態を整える）
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    setIsPremiumUser(localStorage.getItem("isPremiumUser") === "true");
-  }, []);
+  const [isPremiumUser, setIsPremiumUser] = useState<boolean>(() => readLocalPremium());
 
   // 無料ユーザーは「1つだけ」選べる。プレミアム音は選べない（ストレージずれにも対応）
   useEffect(() => {
@@ -1280,6 +1341,37 @@ export default function Home() {
         style={{ background: noiseTheme.overlay }}
         aria-hidden
       />
+      {/* 左上: アカウント導線（中央レイアウトは崩さない） */}
+      <div className="absolute z-[60] left-[max(12px,env(safe-area-inset-left))] top-[max(12px,env(safe-area-inset-top))]">
+        {!authLoading && !authEmail && (
+          <button
+            type="button"
+            onClick={() => router.push("/login")}
+            className="inline-flex items-center gap-2 text-[11px] font-semibold text-white/85 bg-white/5 border border-white/10 px-3 py-1.5 rounded-full backdrop-blur-sm hover:bg-white/10 hover:border-white/20"
+          >
+            ログイン
+          </button>
+        )}
+
+        {!authLoading && authEmail && (
+          <div className="inline-flex items-center gap-2 text-[10px] font-semibold bg-white/5 border border-white/10 px-3 py-1.5 rounded-full backdrop-blur-sm">
+            <span aria-hidden className="text-white/60">
+              ●
+            </span>
+            <span className="text-white/70">ログイン中</span>
+            <span className="text-white/90 max-w-[140px] truncate">
+              {authEmail.split("@")[0]}
+            </span>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="ml-1 text-white/75 hover:text-white underline decoration-white/30 underline-offset-2"
+            >
+              ログアウト
+            </button>
+          </div>
+        )}
+      </div>
       <div className="relative flex flex-1 flex-col items-center justify-between px-4 pt-6 pb-[max(14px,env(safe-area-inset-bottom))] text-white sm:pt-8 sm:pb-[max(18px,env(safe-area-inset-bottom))]">
         {/* ヘッダー（streak → タスク名 → タイマー円） */}
         <div className="w-full max-w-md text-center pt-1 flex flex-col items-center gap-2">
@@ -1957,10 +2049,17 @@ export default function Home() {
         <button
           type="button"
           onClick={() => {
-            try {
-              localStorage.removeItem("isPremiumUser");
-            } catch {}
-            setIsPremiumUser(false);
+            void (async () => {
+              writeLocalPremium(false);
+              try {
+                const { data } = await supabase.auth.getSession();
+                const uid = data.session?.user?.id;
+                if (uid) await upsertUserPremium(uid, false);
+              } catch {
+                // ignore
+              }
+              setIsPremiumUser(false);
+            })();
           }}
           className="fixed z-[80] right-[max(12px,env(safe-area-inset-right))] bottom-[max(12px,env(safe-area-inset-bottom))] px-3 py-2 rounded-full text-xs font-semibold text-white/90 bg-white/10 backdrop-blur-md border border-white/20 hover:bg-white/20"
         >
