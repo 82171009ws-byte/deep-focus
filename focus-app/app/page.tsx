@@ -3,7 +3,14 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import { fetchUserPremium, readLocalPremium, upsertUserPremium, writeLocalPremium } from "@/lib/userProfile";
+import {
+  fetchUserNoisePrefs,
+  fetchUserPremium,
+  readLocalPremium,
+  upsertUserNoisePrefs,
+  upsertUserPremium,
+  writeLocalPremium,
+} from "@/lib/userProfile";
 
 // -----------------------------------------------------------------------------
 // Types
@@ -509,9 +516,9 @@ export default function Home() {
   const [premiumCheckoutError, setPremiumCheckoutError] = useState<string | null>(null);
   const [isFullscreenMode, setIsFullscreenMode] = useState(false);
   const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
-  const [selectedNoise, setSelectedNoise] = useState("none");
-  const [selectedNoise2, setSelectedNoise2] = useState("none");
-  const [noiseVolume, setNoiseVolume] = useState(70);
+  const [selectedNoise, setSelectedNoise] = useState(() => loadNoise().selectedNoise);
+  const [selectedNoise2, setSelectedNoise2] = useState(() => loadNoise().selectedNoise2);
+  const [noiseVolume, setNoiseVolume] = useState(() => loadNoise().noiseVolume);
   const [justCompletedWork, setJustCompletedWork] = useState(false);
   const [justCompletedBreak, setJustCompletedBreak] = useState(false);
   const [nextActionHint, setNextActionHint] = useState<string>("");
@@ -524,17 +531,34 @@ export default function Home() {
     loadBackgroundTheme()
   );
 
-  useEffect(() => {
-    const { selectedNoise: s, selectedNoise2: s2, noiseVolume: v } = loadNoise();
-    setSelectedNoise(s);
-    setSelectedNoise2(s2);
-    setNoiseVolume(v);
-  }, []);
-
   // Supabase Auth + プレミアム: ログイン中は DB 優先、未ログインは localStorage
   useEffect(() => {
     let mounted = true;
     setAuthLoading(true);
+
+    const syncNoise = (session: { user?: { id?: string } } | null) => {
+      if (!mounted) return;
+      const uid = session?.user?.id;
+      if (uid) {
+        void fetchUserNoisePrefs(uid).then((prefs) => {
+          if (!mounted) return;
+          const s1 = normalizeNoiseId(prefs.selectedNoise);
+          const s2 = normalizeNoiseId(prefs.selectedNoise2);
+          const vol =
+            typeof prefs.noiseVolume === "number" && prefs.noiseVolume >= 0 && prefs.noiseVolume <= 100
+              ? prefs.noiseVolume
+              : 70;
+          setSelectedNoise(s1);
+          setSelectedNoise2(s2 === s1 ? "none" : s2);
+          setNoiseVolume(vol);
+        });
+      } else {
+        const { selectedNoise: s, selectedNoise2: s2, noiseVolume: v } = loadNoise();
+        setSelectedNoise(s);
+        setSelectedNoise2(s2);
+        setNoiseVolume(v);
+      }
+    };
 
     const syncPremium = (session: { user?: { id?: string } } | null) => {
       if (!mounted) return;
@@ -554,13 +578,20 @@ export default function Home() {
       .then(({ data }) => {
         if (!mounted) return;
         const session = data.session ?? null;
+        setAuthUserId(session?.user?.id ?? null);
         setAuthEmail(session?.user?.email ?? null);
         syncPremium(session);
+        syncNoise(session);
       })
       .catch(() => {
         if (!mounted) return;
+        setAuthUserId(null);
         setAuthEmail(null);
         setIsPremiumUser(readLocalPremium());
+        const { selectedNoise: s, selectedNoise2: s2, noiseVolume: v } = loadNoise();
+        setSelectedNoise(s);
+        setSelectedNoise2(s2);
+        setNoiseVolume(v);
       })
       .finally(() => {
         if (!mounted) return;
@@ -571,8 +602,10 @@ export default function Home() {
     try {
       const onAuth = supabase.auth.onAuthStateChange((_event, session) => {
         if (!mounted) return;
+        setAuthUserId(session?.user?.id ?? null);
         setAuthEmail(session?.user?.email ?? null);
         syncPremium(session);
+        syncNoise(session);
       });
       subscription = onAuth.data.subscription;
     } catch {
@@ -605,6 +638,7 @@ export default function Home() {
   // Supabase Auth（メール+パスワード）
   const [authEmail, setAuthEmail] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
 
   const fullscreenRef = useRef<HTMLDivElement>(null);
   const audioRefs = useRef<HTMLAudioElement[]>([]);
@@ -1002,15 +1036,16 @@ export default function Home() {
   };
 
   const saveNoise = () => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem(
-        STORAGE_KEYS.noise,
-        JSON.stringify({
-          selectedNoise,
-          selectedNoise2: isPremiumUser ? selectedNoise2 : "none",
-          noiseVolume,
-        })
-      );
+    const payload = {
+      selectedNoise,
+      selectedNoise2: isPremiumUser ? selectedNoise2 : "none",
+      noiseVolume,
+    };
+
+    if (authUserId) {
+      void upsertUserNoisePrefs(authUserId, payload);
+    } else if (typeof window !== "undefined") {
+      localStorage.setItem(STORAGE_KEYS.noise, JSON.stringify(payload));
     }
     setIsPremiumNoiseUpsellOpen(false);
     setIsNoiseModalOpen(false);
