@@ -1085,7 +1085,12 @@ export default function Home() {
     setPremiumCheckoutError(null);
     setPremiumCheckoutLoading(true);
     try {
-      const res = await fetch("/api/checkout", { method: "POST" });
+      const { data: authData } = await supabase.auth.getSession();
+      const token = authData.session?.access_token;
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       const data = (await res.json()) as { url?: string; error?: string };
       if (!res.ok || !data.url) {
         setPremiumCheckoutError(data.error ?? "決済の準備に失敗しました");

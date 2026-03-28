@@ -1,24 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect } from "react";
-import { supabase } from "@/lib/supabaseClient";
-import { upsertUserPremium, writeLocalPremium } from "@/lib/userProfile";
 
 export default function CheckoutSuccessPage() {
-  useEffect(() => {
-    writeLocalPremium(true);
-    void supabase.auth.getSession().then(({ data: { session } }) => {
-      const uid = session?.user?.id;
-      if (uid) void upsertUserPremium(uid, true);
-    });
-  }, []);
-
   return (
     <main className="min-h-dvh flex flex-col items-center justify-center gap-4 px-4 bg-[#0b0f14] text-white">
       <h1 className="text-xl font-semibold text-center">お支払いありがとうございます</h1>
       <p className="text-white/70 text-sm text-center max-w-md leading-relaxed">
-        プレミアムのご登録が完了しました。
+        決済の反映を確認しています。数秒〜数分でプレミアムが有効になる場合があります。
+        <br />
+        反映後はトップ画面を開き直すか、再ログインすると状態が更新されます。
         <br />
         テストモードでは実際の課金は発生しません。
       </p>
