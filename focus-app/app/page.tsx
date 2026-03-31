@@ -8,8 +8,6 @@ import {
   fetchUserPremium,
   readLocalPremium,
   upsertUserNoisePrefs,
-  upsertUserPremium,
-  writeLocalPremium,
 } from "@/lib/userProfile";
 
 // -----------------------------------------------------------------------------
@@ -2084,28 +2082,6 @@ export default function Home() {
 
       {/* 全画面モード UI */}
       {fullscreenUI}
-
-      {isPremiumUser && (
-        <button
-          type="button"
-          onClick={() => {
-            void (async () => {
-              writeLocalPremium(false);
-              try {
-                const { data } = await supabase.auth.getSession();
-                const uid = data.session?.user?.id;
-                if (uid) await upsertUserPremium(uid, false);
-              } catch {
-                // ignore
-              }
-              setIsPremiumUser(false);
-            })();
-          }}
-          className="fixed z-[80] right-[max(12px,env(safe-area-inset-right))] bottom-[max(12px,env(safe-area-inset-bottom))] px-3 py-2 rounded-full text-xs font-semibold text-white/90 bg-white/10 backdrop-blur-md border border-white/20 hover:bg-white/20"
-        >
-          Premium解除（仮）
-        </button>
-      )}
 
       {/* モーダル類 */}
       {noiseModal}
