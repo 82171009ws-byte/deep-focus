@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import {
   fetchUserNoisePrefs,
@@ -9,6 +8,7 @@ import {
   readLocalPremium,
   upsertUserNoisePrefs,
 } from "@/lib/userProfile";
+import { AppMenuDrawer } from "@/components/AppMenuDrawer";
 
 // -----------------------------------------------------------------------------
 // Types
@@ -506,7 +506,6 @@ function FlipDigit({ digit }: { digit: string }) {
 // -----------------------------------------------------------------------------
 
 export default function Home() {
-  const router = useRouter();
   const [timerStatus, setTimerStatus] = useState<TimerStatus>("idle");
   const [isNoiseModalOpen, setIsNoiseModalOpen] = useState(false);
   const [isPremiumNoiseUpsellOpen, setIsPremiumNoiseUpsellOpen] = useState(false);
@@ -514,6 +513,7 @@ export default function Home() {
   const [premiumCheckoutError, setPremiumCheckoutError] = useState<string | null>(null);
   const [isFullscreenMode, setIsFullscreenMode] = useState(false);
   const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
+  const [isAppMenuOpen, setIsAppMenuOpen] = useState(false);
   const [selectedNoise, setSelectedNoise] = useState(() => loadNoise().selectedNoise);
   const [selectedNoise2, setSelectedNoise2] = useState(() => loadNoise().selectedNoise2);
   const [noiseVolume, setNoiseVolume] = useState(() => loadNoise().noiseVolume);
@@ -532,7 +532,6 @@ export default function Home() {
   // Supabase Auth + プレミアム: ログイン中は DB 優先、未ログインは localStorage
   useEffect(() => {
     let mounted = true;
-    setAuthLoading(true);
 
     const syncNoise = (session: { user?: { id?: string } } | null) => {
       if (!mounted) return;
@@ -577,23 +576,17 @@ export default function Home() {
         if (!mounted) return;
         const session = data.session ?? null;
         setAuthUserId(session?.user?.id ?? null);
-        setAuthEmail(session?.user?.email ?? null);
         syncPremium(session);
         syncNoise(session);
       })
       .catch(() => {
         if (!mounted) return;
         setAuthUserId(null);
-        setAuthEmail(null);
         setIsPremiumUser(readLocalPremium());
         const { selectedNoise: s, selectedNoise2: s2, noiseVolume: v } = loadNoise();
         setSelectedNoise(s);
         setSelectedNoise2(s2);
         setNoiseVolume(v);
-      })
-      .finally(() => {
-        if (!mounted) return;
-        setAuthLoading(false);
       });
 
     let subscription: { unsubscribe: () => void } | null = null;
@@ -601,7 +594,6 @@ export default function Home() {
       const onAuth = supabase.auth.onAuthStateChange((_event, session) => {
         if (!mounted) return;
         setAuthUserId(session?.user?.id ?? null);
-        setAuthEmail(session?.user?.email ?? null);
         syncPremium(session);
         syncNoise(session);
       });
@@ -616,14 +608,6 @@ export default function Home() {
     };
   }, []);
 
-  const handleLogout = useCallback(async () => {
-    try {
-      await supabase.auth.signOut();
-    } finally {
-      router.push("/");
-    }
-  }, [router]);
-
   const [mode, setMode] = useState<PomodoroMode>("work");
   const [seconds, setSeconds] = useState(() => getModeSeconds("work", loadFocusPreset()));
   const [sessionIndex, setSessionIndex] = useState(1);
@@ -633,9 +617,6 @@ export default function Home() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(() => loadSelectedTaskId());
   const [showCompletedTasks, setShowCompletedTasks] = useState(() => loadShowCompleted());
 
-  // Supabase Auth（メール+パスワード）
-  const [authEmail, setAuthEmail] = useState<string | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
   const [authUserId, setAuthUserId] = useState<string | null>(null);
 
   const fullscreenRef = useRef<HTMLDivElement>(null);
@@ -1379,37 +1360,6 @@ export default function Home() {
         style={{ background: noiseTheme.overlay }}
         aria-hidden
       />
-      {/* 左上: アカウント導線（中央レイアウトは崩さない） */}
-      <div className="absolute z-[60] left-[max(12px,env(safe-area-inset-left))] top-[max(12px,env(safe-area-inset-top))]">
-        {!authLoading && !authEmail && (
-          <button
-            type="button"
-            onClick={() => router.push("/login")}
-            className="inline-flex items-center gap-2 text-[11px] font-semibold text-white/85 bg-white/5 border border-white/10 px-3 py-1.5 rounded-full backdrop-blur-sm hover:bg-white/10 hover:border-white/20"
-          >
-            ログイン
-          </button>
-        )}
-
-        {!authLoading && authEmail && (
-          <div className="inline-flex items-center gap-2 text-[10px] font-semibold bg-white/5 border border-white/10 px-3 py-1.5 rounded-full backdrop-blur-sm">
-            <span aria-hidden className="text-white/60">
-              ●
-            </span>
-            <span className="text-white/70">ログイン中</span>
-            <span className="text-white/90 max-w-[140px] truncate">
-              {authEmail.split("@")[0]}
-            </span>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="ml-1 text-white/75 hover:text-white underline decoration-white/30 underline-offset-2"
-            >
-              ログアウト
-            </button>
-          </div>
-        )}
-      </div>
       <div className="relative flex flex-1 flex-col items-center justify-between px-4 pt-6 pb-[max(14px,env(safe-area-inset-bottom))] text-white sm:pt-8 sm:pb-[max(18px,env(safe-area-inset-bottom))]">
         {/* ヘッダー（streak → タスク名 → タイマー円） */}
         <div className="w-full max-w-md text-center pt-1 flex flex-col items-center gap-2">
@@ -1603,19 +1553,6 @@ export default function Home() {
         style={{ background: noiseTheme.overlay }}
         aria-hidden
       />
-
-      {/* 左上: 閉じるボタン（全画面解除のみ、タイマー状態は維持） */}
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          exitFullscreen();
-        }}
-        className="fixed top-[max(12px,env(safe-area-inset-top))] left-[max(12px,env(safe-area-inset-left))] z-20 flex items-center justify-center w-12 h-12 min-w-[48px] min-h-[48px] rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white/90 text-xl leading-none hover:bg-white/20 hover:text-white transition"
-        aria-label="全画面を閉じる"
-      >
-        ×
-      </button>
 
       {/* 余計なUIを消し、タイマーだけ中央に大きく */}
       <div className="relative flex-1 flex items-center justify-center p-4">
@@ -2075,8 +2012,37 @@ export default function Home() {
     </div>
   );
 
+  const menuButtonClass =
+    "flex items-center justify-center w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white/90 text-xl font-light leading-none hover:bg-white/20 hover:text-white transition";
+
   return (
     <main className="relative min-h-dvh">
+      {/* 左上: ハンバーガー（ビューポート固定・全画面時は閉じるボタンを隣に並べる） */}
+      <div className="fixed z-[59] top-[max(12px,env(safe-area-inset-top))] left-[max(12px,env(safe-area-inset-left))] flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setIsAppMenuOpen(true)}
+          className={menuButtonClass}
+          aria-label="メニューを開く"
+          aria-expanded={isAppMenuOpen}
+        >
+          <span aria-hidden>≡</span>
+        </button>
+        {isFullscreenMode && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              exitFullscreen();
+            }}
+            className={`${menuButtonClass} font-normal text-xl leading-none`}
+            aria-label="全画面を閉じる"
+          >
+            ×
+          </button>
+        )}
+      </div>
+
       {/* 通常表示: 背景 + タイマー + フッター */}
       <div className={isFullscreenMode ? "invisible" : ""}>{normalView}</div>
 
@@ -2089,6 +2055,14 @@ export default function Home() {
       {themeModal}
       {stopConfirmModal}
       {taskSelector}
+
+      <AppMenuDrawer
+        open={isAppMenuOpen}
+        onClose={() => setIsAppMenuOpen(false)}
+        onOpenTasks={() => setTaskDrawerOpen(true)}
+        onOpenSettings={() => setIsThemeModalOpen(true)}
+        onOpenPremium={() => setIsPremiumNoiseUpsellOpen(true)}
+      />
     </main>
   );
 }
