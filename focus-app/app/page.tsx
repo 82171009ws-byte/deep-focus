@@ -8,6 +8,18 @@ import {
   readLocalPremium,
   upsertUserNoisePrefs,
 } from "@/lib/userProfile";
+import { loadTasksFromLocalStorage, persistTasksToLocalStorage, type Task } from "@/lib/tasksLocal";
+import {
+  deleteTaskFromSupabase,
+  insertTaskToSupabase,
+  persistSelectedTaskIdToSupabase,
+  updateTaskInSupabase,
+} from "@/lib/tasksSupabase";
+import {
+  hydrateLocalTasks,
+  hydrateRemoteTasks,
+  migrateLocalTasksIfNeeded,
+} from "@/lib/taskSessionSync";
 import { AppMenuDrawer } from "@/components/AppMenuDrawer";
 
 // -----------------------------------------------------------------------------
@@ -295,13 +307,6 @@ function getNoiseTheme(baseTheme: BackgroundThemeKey): NoiseTheme {
   return { backgroundImage: base.backgroundImage, overlay: base.overlay };
 }
 
-interface Task {
-  id: string;
-  text: string;
-  completed: boolean;
-  actualPomodoros?: number;
-}
-
 interface DailyStats {
   focusSeconds: number;
   completedPomos: number;
@@ -316,7 +321,6 @@ interface StreakState {
 const DEFAULT_DAILY_GOAL = 4;
 
 const STORAGE_KEYS = {
-  tasks: "focus-tasks",
   stats: (d: string) => `focus-stats-${d}`,
   selectedTask: "focus-selected-task",
   noise: "focus-noise",
@@ -343,21 +347,6 @@ function formatDurationLabel(totalSeconds: number) {
   const hours = Math.floor(minutes / 60);
   const remainMinutes = minutes % 60;
   return remainMinutes > 0 ? `${hours}時間${remainMinutes}分` : `${hours}時間`;
-}
-
-function loadTasks(): Task[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.tasks);
-    if (!raw) return [];
-    const list = JSON.parse(raw);
-    return (Array.isArray(list) ? list : []).map((t: Task) => ({
-      ...t,
-      actualPomodoros: typeof t.actualPomodoros === "number" ? t.actualPomodoros : 0,
-    }));
-  } catch {
-    return [];
-  }
 }
 
 function loadStats(): DailyStats {
@@ -511,6 +500,8 @@ export default function Home() {
   const [isPremiumNoiseUpsellOpen, setIsPremiumNoiseUpsellOpen] = useState(false);
   const [premiumCheckoutLoading, setPremiumCheckoutLoading] = useState(false);
   const [premiumCheckoutError, setPremiumCheckoutError] = useState<string | null>(null);
+  const [planPortalLoading, setPlanPortalLoading] = useState(false);
+  const [planPortalError, setPlanPortalError] = useState<string | null>(null);
   const [isFullscreenMode, setIsFullscreenMode] = useState(false);
   const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
   const [isAppMenuOpen, setIsAppMenuOpen] = useState(false);
@@ -528,6 +519,11 @@ export default function Home() {
   const [backgroundTheme, setBackgroundTheme] = useState<BackgroundThemeKey>(() =>
     loadBackgroundTheme()
   );
+
+  /** ログイン後のリモートタスク取得完了まで true にしない（選択を DB に誤書きしない） */
+  const tasksRemoteHydratedRef = useRef(false);
+  const prevRemoteTaskUserIdRef = useRef<string | null>(null);
+  const [tasksRemoteLoading, setTasksRemoteLoading] = useState(false);
 
   // Supabase Auth + プレミアム: ログイン中は DB 優先、未ログインは localStorage
   useEffect(() => {
@@ -570,6 +566,49 @@ export default function Home() {
       }
     };
 
+    const syncTasksSession = async (session: { user?: { id?: string } } | null) => {
+      if (!mounted) return;
+      const uid = session?.user?.id ?? null;
+
+      if (!uid) {
+        prevRemoteTaskUserIdRef.current = null;
+        tasksRemoteHydratedRef.current = true;
+        setTasksRemoteLoading(false);
+        const local = hydrateLocalTasks();
+        setTasks(local.tasks);
+        setSelectedTaskId(local.selectedTaskId);
+        return;
+      }
+
+      const isNewRemoteUser = prevRemoteTaskUserIdRef.current !== uid;
+      if (isNewRemoteUser) {
+        prevRemoteTaskUserIdRef.current = uid;
+        setTasksRemoteLoading(true);
+        tasksRemoteHydratedRef.current = false;
+      }
+
+      const mig = await migrateLocalTasksIfNeeded(session);
+      if (!mig.ok) {
+        console.error("[tasks] migrateLocalTasksIfNeeded:", mig.error);
+        setTasksRemoteLoading(false);
+        tasksRemoteHydratedRef.current = true;
+        return;
+      }
+
+      const remote = await hydrateRemoteTasks(session);
+      setTasksRemoteLoading(false);
+      tasksRemoteHydratedRef.current = true;
+
+      if (!remote.ok) {
+        console.error("[tasks] hydrateRemoteTasks:", remote.error);
+        return;
+      }
+
+      if (!mounted) return;
+      setTasks(remote.tasks);
+      setSelectedTaskId(remote.selectedTaskId);
+    };
+
     supabase.auth
       .getSession()
       .then(({ data }) => {
@@ -578,6 +617,7 @@ export default function Home() {
         setAuthUserId(session?.user?.id ?? null);
         syncPremium(session);
         syncNoise(session);
+        void syncTasksSession(session);
       })
       .catch(() => {
         if (!mounted) return;
@@ -587,6 +627,12 @@ export default function Home() {
         setSelectedNoise(s);
         setSelectedNoise2(s2);
         setNoiseVolume(v);
+        prevRemoteTaskUserIdRef.current = null;
+        tasksRemoteHydratedRef.current = true;
+        setTasksRemoteLoading(false);
+        const local = hydrateLocalTasks();
+        setTasks(local.tasks);
+        setSelectedTaskId(local.selectedTaskId);
       });
 
     let subscription: { unsubscribe: () => void } | null = null;
@@ -596,6 +642,7 @@ export default function Home() {
         setAuthUserId(session?.user?.id ?? null);
         syncPremium(session);
         syncNoise(session);
+        void syncTasksSession(session);
       });
       subscription = onAuth.data.subscription;
     } catch {
@@ -611,7 +658,7 @@ export default function Home() {
   const [mode, setMode] = useState<PomodoroMode>("work");
   const [seconds, setSeconds] = useState(() => getModeSeconds("work", loadFocusPreset()));
   const [sessionIndex, setSessionIndex] = useState(1);
-  const [tasks, setTasks] = useState<Task[]>(() => loadTasks());
+  const [tasks, setTasks] = useState<Task[]>(() => loadTasksFromLocalStorage());
   const [input, setInput] = useState("");
   const [stats, setStats] = useState<DailyStats>(() => loadStats());
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(() => loadSelectedTaskId());
@@ -645,11 +692,6 @@ export default function Home() {
       setSelectedNoise("none");
     }
   }, [isPremiumUser, selectedNoise, selectedNoise2]);
-
-  const saveTasks = useCallback((next: Task[]) => {
-    setTasks(next);
-    if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEYS.tasks, JSON.stringify(next));
-  }, []);
 
   // タイマー刻み（既存ロジックを活かす）
   useEffect(() => {
@@ -706,12 +748,28 @@ export default function Home() {
             });
             setTasks((prevTasks) => {
               if (!selectedTaskId) return prevTasks;
+              const current = prevTasks.find((t) => t.id === selectedTaskId);
+              if (!current) return prevTasks;
+              const updated: Task = {
+                ...current,
+                actualPomodoros: current.actualPomodoros + 1,
+              };
+              if (authUserId) {
+                void updateTaskInSupabase(updated).then((ok) => {
+                  if (ok) {
+                    setTasks((p) =>
+                      p.map((t) => (t.id === selectedTaskId ? updated : t))
+                    );
+                  } else {
+                    console.error("[tasks] ポモ完了の保存に失敗しました（表示は更新していません）");
+                  }
+                });
+                return prevTasks;
+              }
               const next = prevTasks.map((task) =>
-                task.id === selectedTaskId
-                  ? { ...task, actualPomodoros: (task.actualPomodoros ?? 0) + 1 }
-                  : task
+                task.id === selectedTaskId ? updated : task
               );
-              if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEYS.tasks, JSON.stringify(next));
+              persistTasksToLocalStorage(next);
               return next;
             });
             if (sessionIndex >= SESSIONS_BEFORE_LONG) {
@@ -736,7 +794,7 @@ export default function Home() {
       });
     }, 1000);
     return () => clearInterval(t);
-  }, [running, mode, sessionIndex, selectedTaskId, focusPreset]);
+  }, [running, mode, sessionIndex, selectedTaskId, focusPreset, authUserId]);
 
   // 完了演出は短時間だけ表示
   useEffect(() => {
@@ -880,9 +938,15 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (selectedTaskId) localStorage.setItem(STORAGE_KEYS.selectedTask, selectedTaskId);
-    else localStorage.removeItem(STORAGE_KEYS.selectedTask);
-  }, [selectedTaskId]);
+    if (authUserId && !tasksRemoteHydratedRef.current) return;
+    if (authUserId) {
+      void persistSelectedTaskIdToSupabase(authUserId, selectedTaskId);
+    } else if (selectedTaskId) {
+      localStorage.setItem(STORAGE_KEYS.selectedTask, selectedTaskId);
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.selectedTask);
+    }
+  }, [selectedTaskId, authUserId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -992,26 +1056,60 @@ export default function Home() {
     [isIdle, mode]
   );
 
-  const addTask = () => {
-    const text = input.trim();
-    if (!text) return;
+  const addTask = async () => {
+    const title = input.trim();
+    if (!title) return;
     const newTask: Task = {
       id: crypto.randomUUID(),
-      text,
+      title,
       completed: false,
       actualPomodoros: 0,
     };
-    saveTasks([...tasks, newTask]);
+    if (authUserId) {
+      const ok = await insertTaskToSupabase(authUserId, newTask);
+      if (!ok) return;
+    }
+    setTasks((prev) => {
+      const next = [...prev, newTask];
+      if (!authUserId) persistTasksToLocalStorage(next);
+      return next;
+    });
     setInput("");
   };
 
-  const toggleTask = (id: string) => {
-    saveTasks(tasks.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t)));
+  const toggleTask = async (id: string) => {
+    const t = tasks.find((x) => x.id === id);
+    if (!t) return;
+    const updated: Task = { ...t, completed: !t.completed };
+    if (authUserId) {
+      const ok = await updateTaskInSupabase(updated);
+      if (!ok) return;
+      setTasks((prev) => prev.map((x) => (x.id === id ? updated : x)));
+      return;
+    }
+    setTasks((prev) => {
+      const next = prev.map((x) => (x.id === id ? updated : x));
+      persistTasksToLocalStorage(next);
+      return next;
+    });
   };
 
-  const deleteTask = (id: string) => {
-    saveTasks(tasks.filter((t) => t.id !== id));
-    setSelectedTaskId((prev) => (prev === id ? null : prev));
+  const deleteTask = async (id: string) => {
+    if (authUserId) {
+      const ok = await deleteTaskFromSupabase(id);
+      if (!ok) return;
+      if (selectedTaskId === id) {
+        void persistSelectedTaskIdToSupabase(authUserId, null);
+        setSelectedTaskId(null);
+      }
+    } else {
+      setSelectedTaskId((prev) => (prev === id ? null : prev));
+    }
+    setTasks((prev) => {
+      const next = prev.filter((t) => t.id !== id);
+      if (!authUserId) persistTasksToLocalStorage(next);
+      return next;
+    });
   };
 
   const saveNoise = () => {
@@ -1080,6 +1178,30 @@ export default function Home() {
     } catch {
       setPremiumCheckoutError("通信に失敗しました");
       setPremiumCheckoutLoading(false);
+    }
+  }, []);
+
+  /** Stripe Customer Portal（解約・お支払い方法など） */
+  const openStripeCustomerPortal = useCallback(async () => {
+    setPlanPortalError(null);
+    setPlanPortalLoading(true);
+    try {
+      const { data: authData } = await supabase.auth.getSession();
+      const token = authData.session?.access_token;
+      const res = await fetch("/api/stripe/portal", {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const data = (await res.json()) as { url?: string; error?: string };
+      if (!res.ok || !data.url) {
+        setPlanPortalError(data.error ?? "プラン管理を開けませんでした");
+        setPlanPortalLoading(false);
+        return;
+      }
+      window.location.assign(data.url);
+    } catch {
+      setPlanPortalError("通信に失敗しました");
+      setPlanPortalLoading(false);
     }
   }, []);
 
@@ -1383,7 +1505,11 @@ export default function Home() {
             onClick={() => setTaskDrawerOpen(true)}
             className="text-white/90 text-sm font-medium underline decoration-white/50 underline-offset-2 hover:text-white"
           >
-            {selectedTask ? selectedTask.text : "タスクを選んでください…"}
+            {authUserId && tasksRemoteLoading
+              ? "タスクを読み込み中…"
+              : selectedTask
+                ? selectedTask.title
+                : "タスクを選んでください…"}
           </button>
 
           {/* プレミアム: タスク名の直下には置かず、補助情報ブロックの一部としてまとめて表示 */}
@@ -1870,7 +1996,7 @@ export default function Home() {
     </div>
   );
 
-  // タスク選択ドロワー（簡易: タスク未選択時は「タスクを選んでください」クリックで開く想定）
+  // タスク（メニュー「タスク」またはヘッダーのタスク名から開く）
   const [taskDrawerOpen, setTaskDrawerOpen] = useState(false);
   const taskSelector = (
     <div
@@ -1879,70 +2005,91 @@ export default function Home() {
       onClick={() => setTaskDrawerOpen(false)}
       role="dialog"
       aria-modal="true"
+      aria-labelledby="task-drawer-title"
     >
       <div
-        className="w-full max-w-md max-h-[80vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-gray-900 text-white p-6"
+        className="w-full max-w-md max-h-[80vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-gray-900 text-white p-6 border border-white/10 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold">タスクを選択</h2>
-          <button type="button" onClick={() => setTaskDrawerOpen(false)} className="p-2 text-white/70 hover:text-white">
+        <div className="flex justify-between items-start gap-2 mb-1">
+          <div>
+            <h2 id="task-drawer-title" className="text-lg font-semibold">
+              タスク
+            </h2>
+            <p className="text-xs text-white/50 mt-0.5">選んだタスクがタイマーの対象になります。作業セッション完了で実績ポモが +1 されます。</p>
+          </div>
+          <button type="button" onClick={() => setTaskDrawerOpen(false)} className="p-2 text-white/70 hover:text-white shrink-0">
             ×
           </button>
         </div>
-        <div className="flex gap-2 mb-4">
+        <div className="flex gap-2 mb-4 mt-4">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addTask()}
-            placeholder="新しいタスク"
-            className="flex-1 px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/40"
+            onKeyDown={(e) => e.key === "Enter" && void addTask()}
+            placeholder="タイトルを入力"
+            disabled={Boolean(authUserId && tasksRemoteLoading)}
+            className="flex-1 px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/40 text-sm disabled:opacity-50"
           />
           <button
             type="button"
-            onClick={addTask}
-            className="px-4 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white"
+            onClick={() => void addTask()}
+            disabled={Boolean(authUserId && tasksRemoteLoading)}
+            className="px-4 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white text-sm font-medium shrink-0 disabled:opacity-50"
           >
             追加
           </button>
         </div>
         <ul className="space-y-2">
-          {unfinishedTasks.map((task) => (
-            <li key={task.id}>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedTaskId(task.id);
-                  setTaskDrawerOpen(false);
-                }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left ${selectedTaskId === task.id ? "bg-white/15 ring-1 ring-white/30" : "hover:bg-white/10"}`}
-              >
-                <input
-                  type="checkbox"
-                  checked={false}
-                  onChange={(e) => {
-                    e.stopPropagation();
-                    toggleTask(task.id);
-                  }}
-                  className="rounded"
-                />
-                <span className="flex-1">{task.text}</span>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    deleteTask(task.id);
-                  }}
-                  className="text-white/50 hover:text-red-400 text-sm"
-                >
-                  削除
-                </button>
-              </button>
-            </li>
-          ))}
+          {authUserId && tasksRemoteLoading ? (
+            <li className="px-2 py-10 text-center text-sm text-white/50">タスクを読み込み中…</li>
+          ) : (
+            <>
+              {unfinishedTasks.length === 0 && (
+                <li className="px-2 py-6 text-center text-sm text-white/45">
+                  タスクがありません。上の欄から追加してください。
+                </li>
+              )}
+              {unfinishedTasks.map((task) => (
+                <li key={task.id}>
+                  <div
+                    className={`flex items-center gap-2 px-3 py-2.5 rounded-xl ${
+                      selectedTaskId === task.id ? "bg-white/15 ring-1 ring-white/30" : "bg-white/5 hover:bg-white/10"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={task.completed}
+                      onChange={() => void toggleTask(task.id)}
+                      aria-label={`「${task.title}」を完了にする`}
+                      className="rounded border-white/30 shrink-0"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedTaskId(task.id);
+                        setTaskDrawerOpen(false);
+                      }}
+                      className="min-w-0 flex-1 flex items-center justify-between gap-2 text-left text-sm"
+                    >
+                      <span className="truncate text-white/90">{task.title}</span>
+                      <span className="shrink-0 tabular-nums text-xs text-white/45">{task.actualPomodoros} ポモ</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void deleteTask(task.id)}
+                      className="shrink-0 text-white/45 hover:text-red-400 text-xs px-2 py-1 rounded-md hover:bg-white/10"
+                    >
+                      削除
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </>
+          )}
         </ul>
-        {completedTasks.length > 0 && (
+        {!tasksRemoteLoading && completedTasks.length > 0 && (
           <div className="mt-4">
             <button
               type="button"
@@ -1954,15 +2101,24 @@ export default function Home() {
             {showCompletedTasks && (
               <ul className="mt-2 space-y-1">
                 {completedTasks.map((task) => (
-                  <li key={task.id} className="flex items-center gap-2 px-4 py-2 text-white/50 text-sm line-through">
+                  <li
+                    key={task.id}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-white/50 text-sm bg-white/[0.03]"
+                  >
                     <input
                       type="checkbox"
-                      checked
-                      onChange={() => toggleTask(task.id)}
-                      className="rounded"
+                      checked={task.completed}
+                      onChange={() => void toggleTask(task.id)}
+                      aria-label={`「${task.title}」を未完了に戻す`}
+                      className="rounded border-white/30 shrink-0"
                     />
-                    {task.text}
-                    <button type="button" onClick={() => deleteTask(task.id)} className="text-red-400/80 text-xs">
+                    <span className="flex-1 min-w-0 truncate line-through">{task.title}</span>
+                    <span className="shrink-0 tabular-nums text-xs text-white/40">{task.actualPomodoros} ポモ</span>
+                    <button
+                      type="button"
+                      onClick={() => void deleteTask(task.id)}
+                      className="text-red-400/80 text-xs px-2 py-1 rounded-md hover:bg-white/10 shrink-0"
+                    >
                       削除
                     </button>
                   </li>
@@ -2058,10 +2214,17 @@ export default function Home() {
 
       <AppMenuDrawer
         open={isAppMenuOpen}
-        onClose={() => setIsAppMenuOpen(false)}
+        onClose={() => {
+          setIsAppMenuOpen(false);
+          setPlanPortalError(null);
+        }}
         onOpenTasks={() => setTaskDrawerOpen(true)}
         onOpenSettings={() => setIsThemeModalOpen(true)}
         onOpenPremium={() => setIsPremiumNoiseUpsellOpen(true)}
+        showPlanManagement={Boolean(authUserId && isPremiumUser)}
+        onOpenPlanManagement={() => void openStripeCustomerPortal()}
+        planManagementLoading={planPortalLoading}
+        planManagementError={planPortalError}
       />
     </main>
   );

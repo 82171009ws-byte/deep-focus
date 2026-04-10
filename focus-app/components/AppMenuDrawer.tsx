@@ -11,6 +11,10 @@ export type AppMenuDrawerProps = {
   onOpenTasks: () => void;
   onOpenSettings: () => void;
   onOpenPremium: () => void;
+  showPlanManagement?: boolean;
+  onOpenPlanManagement?: () => void;
+  planManagementLoading?: boolean;
+  planManagementError?: string | null;
 };
 
 export function AppMenuDrawer({
@@ -19,6 +23,10 @@ export function AppMenuDrawer({
   onOpenTasks,
   onOpenSettings,
   onOpenPremium,
+  showPlanManagement = false,
+  onOpenPlanManagement,
+  planManagementLoading = false,
+  planManagementError = null,
 }: AppMenuDrawerProps) {
   const [present, setPresent] = useState(false);
   const [entered, setEntered] = useState(false);
@@ -85,6 +93,10 @@ export function AppMenuDrawer({
     onOpenPremium();
   }, [onClose, onOpenPremium]);
 
+  const goPlanManagement = useCallback(() => {
+    onOpenPlanManagement?.();
+  }, [onOpenPlanManagement]);
+
   if (!present) return null;
 
   const itemClass =
@@ -140,6 +152,26 @@ export function AppMenuDrawer({
           <button type="button" onClick={goPremium} className={itemClass}>
             プレミアム
           </button>
+          {showPlanManagement && (
+            <>
+              <button
+                type="button"
+                onClick={goPlanManagement}
+                disabled={planManagementLoading}
+                className={`${itemClass} disabled:opacity-50 disabled:pointer-events-none`}
+              >
+                {planManagementLoading ? "プラン管理を開いています…" : "プラン管理"}
+              </button>
+              {planManagementError && (
+                <p
+                  className="mt-1 px-3 py-2 rounded-lg text-xs text-red-300/95 bg-red-500/15 border border-red-500/25 leading-snug"
+                  role="alert"
+                >
+                  {planManagementError}
+                </p>
+              )}
+            </>
+          )}
         </nav>
       </aside>
     </div>
