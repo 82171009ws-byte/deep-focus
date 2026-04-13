@@ -19,6 +19,8 @@ export type AppMenuDrawerProps = {
   showLogout?: boolean;
   onLogout?: () => void | Promise<void>;
   logoutLoading?: boolean;
+  /** 未ログイン時のみ true（メニューにログインリンクを出す） */
+  showLogin?: boolean;
 };
 
 export function AppMenuDrawer({
@@ -34,6 +36,7 @@ export function AppMenuDrawer({
   showLogout = false,
   onLogout,
   logoutLoading = false,
+  showLogin = false,
 }: AppMenuDrawerProps) {
   const [present, setPresent] = useState(false);
   const [entered, setEntered] = useState(false);
@@ -159,6 +162,11 @@ export function AppMenuDrawer({
           <button type="button" onClick={goPremium} className={itemClass}>
             プレミアム
           </button>
+          {showLogin && (
+            <Link href="/login" onClick={onClose} className={itemClass}>
+              ログイン
+            </Link>
+          )}
           {showPlanManagement && (
             <>
               <button

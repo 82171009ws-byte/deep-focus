@@ -2247,6 +2247,7 @@ export default function Home() {
         showLogout={Boolean(authUserId)}
         onLogout={() => void handleLogout()}
         logoutLoading={logoutLoading}
+        showLogin={!authUserId}
       />
     </main>
   );
