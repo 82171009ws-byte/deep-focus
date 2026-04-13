@@ -15,6 +15,10 @@ export type AppMenuDrawerProps = {
   onOpenPlanManagement?: () => void;
   planManagementLoading?: boolean;
   planManagementError?: string | null;
+  /** ログイン中のみ true（サイドバー最下部にログアウトを出す） */
+  showLogout?: boolean;
+  onLogout?: () => void | Promise<void>;
+  logoutLoading?: boolean;
 };
 
 export function AppMenuDrawer({
@@ -27,6 +31,9 @@ export function AppMenuDrawer({
   onOpenPlanManagement,
   planManagementLoading = false,
   planManagementError = null,
+  showLogout = false,
+  onLogout,
+  logoutLoading = false,
 }: AppMenuDrawerProps) {
   const [present, setPresent] = useState(false);
   const [entered, setEntered] = useState(false);
@@ -173,6 +180,19 @@ export function AppMenuDrawer({
             </>
           )}
         </nav>
+
+        {showLogout && onLogout && (
+          <div className="shrink-0 border-t border-white/10 px-3 py-3">
+            <button
+              type="button"
+              onClick={() => void onLogout()}
+              disabled={logoutLoading}
+              className={`${itemClass} text-white/70 hover:text-white hover:bg-white/10 border border-white/15`}
+            >
+              {logoutLoading ? "ログアウト中…" : "ログアウト"}
+            </button>
+          </div>
+        )}
       </aside>
     </div>
   );

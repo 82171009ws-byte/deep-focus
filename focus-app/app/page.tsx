@@ -502,6 +502,7 @@ export default function Home() {
   const [premiumCheckoutError, setPremiumCheckoutError] = useState<string | null>(null);
   const [planPortalLoading, setPlanPortalLoading] = useState(false);
   const [planPortalError, setPlanPortalError] = useState<string | null>(null);
+  const [logoutLoading, setLogoutLoading] = useState(false);
   const [isFullscreenMode, setIsFullscreenMode] = useState(false);
   const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
   const [isAppMenuOpen, setIsAppMenuOpen] = useState(false);
@@ -1202,6 +1203,24 @@ export default function Home() {
     } catch {
       setPlanPortalError("通信に失敗しました");
       setPlanPortalLoading(false);
+    }
+  }, []);
+
+  /** Supabase セッション終了後にリロードし、localStorage ベースの状態に揃える */
+  const handleLogout = useCallback(async () => {
+    setLogoutLoading(true);
+    setIsAppMenuOpen(false);
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error("[auth] signOut:", error.message);
+        setLogoutLoading(false);
+        return;
+      }
+      window.location.reload();
+    } catch (e) {
+      console.error("[auth] signOut:", e);
+      setLogoutLoading(false);
     }
   }, []);
 
@@ -2225,6 +2244,9 @@ export default function Home() {
         onOpenPlanManagement={() => void openStripeCustomerPortal()}
         planManagementLoading={planPortalLoading}
         planManagementError={planPortalError}
+        showLogout={Boolean(authUserId)}
+        onLogout={() => void handleLogout()}
+        logoutLoading={logoutLoading}
       />
     </main>
   );
