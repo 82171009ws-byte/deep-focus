@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
-import { writeLocalPremium } from "@/lib/userProfile";
+import { clearPremiumLocalStorage } from "@/lib/userProfile";
 
 export default function CheckoutCancelPage() {
   useEffect(() => {
-    writeLocalPremium(false);
+    clearPremiumLocalStorage();
   }, []);
 
   return (

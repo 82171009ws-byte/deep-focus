@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import {
+  clearPremiumLocalStorage,
   fetchUserNoisePrefs,
   fetchUserPremium,
-  readLocalPremium,
   upsertUserNoisePrefs,
 } from "@/lib/userProfile";
 import { loadTasksFromLocalStorage, persistTasksToLocalStorage, type Task } from "@/lib/tasksLocal";
@@ -563,7 +563,7 @@ export default function Home() {
           setIsPremiumUser(premium);
         });
       } else {
-        setIsPremiumUser(readLocalPremium());
+        setIsPremiumUser(false);
       }
     };
 
@@ -623,7 +623,7 @@ export default function Home() {
       .catch(() => {
         if (!mounted) return;
         setAuthUserId(null);
-        setIsPremiumUser(readLocalPremium());
+        setIsPremiumUser(false);
         const { selectedNoise: s, selectedNoise2: s2, noiseVolume: v } = loadNoise();
         setSelectedNoise(s);
         setSelectedNoise2(s2);
@@ -676,11 +676,14 @@ export default function Home() {
   const isRunning = timerStatus === "running";
   const isPaused = timerStatus === "paused";
   const running = isRunning;
-  const [isPremiumUser, setIsPremiumUser] = useState<boolean>(() => readLocalPremium());
+  /** user_profiles.is_premium のミラー（未ログイン時は常に false とみなす） */
+  const [isPremiumUser, setIsPremiumUser] = useState<boolean>(false);
+  /** ログインかつ user_profiles.is_premium が true のときのみ有料機能を解放 */
+  const isPremiumUnlocked = Boolean(authUserId && isPremiumUser);
 
   // 無料ユーザーは「1つだけ」選べる。プレミアム音は選べない（ストレージずれにも対応）
   useEffect(() => {
-    if (isPremiumUser) return;
+    if (isPremiumUnlocked) return;
 
     // 2つ目が残っていたら 1つに畳む（1つ目がnoneなら2つ目を昇格）
     if (selectedNoise === "none" && selectedNoise2 !== "none") {
@@ -692,7 +695,7 @@ export default function Home() {
     if (primaryOpt?.isPremium) {
       setSelectedNoise("none");
     }
-  }, [isPremiumUser, selectedNoise, selectedNoise2]);
+  }, [isPremiumUnlocked, selectedNoise, selectedNoise2]);
 
   // タイマー刻み（既存ロジックを活かす）
   useEffect(() => {
@@ -885,14 +888,14 @@ export default function Home() {
   // - 無料: 1つのみ
   // - プレミアム: 最大2つを同時再生（均等割り当て）
   const noiseFilesKeyInfo = (() => {
-    const ids = (isPremiumUser ? [selectedNoise, selectedNoise2] : [selectedNoise]).filter(
+    const ids = (isPremiumUnlocked ? [selectedNoise, selectedNoise2] : [selectedNoise]).filter(
       (id) => id && id !== "none"
     );
     const allowedIds: string[] = [];
     for (const id of ids) {
       const opt = SOUND_OPTIONS.find((o) => o.id === id);
       if (!opt?.file) continue;
-      if (opt.isPremium && !isPremiumUser) continue;
+      if (opt.isPremium && !isPremiumUnlocked) continue;
       if (!allowedIds.includes(id)) allowedIds.push(id);
     }
     const files = allowedIds
@@ -935,7 +938,7 @@ export default function Home() {
     } catch {
       audioRefs.current = [];
     }
-  }, [noiseFilesKeyInfo.key, noiseFilesKeyInfo.files.length, noiseVolume, running, mode, isPremiumUser]);
+  }, [noiseFilesKeyInfo.key, noiseFilesKeyInfo.files.length, noiseVolume, running, mode, isPremiumUnlocked]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1116,7 +1119,7 @@ export default function Home() {
   const saveNoise = () => {
     const payload = {
       selectedNoise,
-      selectedNoise2: isPremiumUser ? selectedNoise2 : "none",
+      selectedNoise2: isPremiumUnlocked ? selectedNoise2 : "none",
       noiseVolume,
     };
 
@@ -1130,7 +1133,7 @@ export default function Home() {
   };
 
   const previewNoise = (option: SoundOption) => {
-    if (option.isPremium && !isPremiumUser) return;
+    if (option.isPremium && !isPremiumUnlocked) return;
     const path = option.file;
     try {
       audioRefs.current.forEach((a) => {
@@ -1217,6 +1220,7 @@ export default function Home() {
         setLogoutLoading(false);
         return;
       }
+      clearPremiumLocalStorage();
       window.location.reload();
     } catch (e) {
       console.error("[auth] signOut:", e);
@@ -1532,7 +1536,7 @@ export default function Home() {
           </button>
 
           {/* プレミアム: タスク名の直下には置かず、補助情報ブロックの一部としてまとめて表示 */}
-          {isPremiumUser && (
+          {isPremiumUnlocked && (
             <div className="inline-flex items-center gap-2 text-[11px] font-semibold text-emerald-100 bg-emerald-400/10 border border-emerald-400/25 px-3 py-1 rounded-full backdrop-blur-sm">
               <span aria-hidden>✓</span>
               <span>プレミアム利用中</span>
@@ -1775,7 +1779,7 @@ export default function Home() {
   })();
 
   const renderNoiseOptionRow = (opt: SoundOption) => {
-    const locked = opt.isPremium && !isPremiumUser;
+    const locked = opt.isPremium && !isPremiumUnlocked;
     const isSelected = opt.id === selectedNoise || (selectedNoise2 !== "none" && opt.id === selectedNoise2);
     return (
       <li key={opt.id}>
@@ -1794,7 +1798,7 @@ export default function Home() {
               return;
             }
 
-            if (!isPremiumUser) {
+            if (!isPremiumUnlocked) {
               setSelectedNoise(opt.id);
               setSelectedNoise2("none");
               previewNoise(opt);
@@ -1912,7 +1916,7 @@ export default function Home() {
             <ul className="space-y-1">{freeSoundOptions.map(renderNoiseOptionRow)}</ul>
           </div>
           <div className="pt-3 border-t border-white/10 space-y-4">
-            {isPremiumUser && selectedNoise !== "none" && selectedNoise2 !== "none" && (
+            {isPremiumUnlocked && selectedNoise !== "none" && selectedNoise2 !== "none" && (
               <p className="text-[10px] text-white/45 leading-snug">
                 3つ目を選ぶと2つ目が置き換わります
               </p>
@@ -2240,7 +2244,7 @@ export default function Home() {
         onOpenTasks={() => setTaskDrawerOpen(true)}
         onOpenSettings={() => setIsThemeModalOpen(true)}
         onOpenPremium={() => setIsPremiumNoiseUpsellOpen(true)}
-        showPlanManagement={Boolean(authUserId && isPremiumUser)}
+        showPlanManagement={isPremiumUnlocked}
         onOpenPlanManagement={() => void openStripeCustomerPortal()}
         planManagementLoading={planPortalLoading}
         planManagementError={planPortalError}

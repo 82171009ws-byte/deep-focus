@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabaseClient";
 
+/** 旧クライアントのみが参照していたキー。premium 判定には使わない。 */
 export const PREMIUM_LOCAL_STORAGE_KEY = "isPremiumUser";
 
 const TABLE = "user_profiles";
@@ -20,20 +21,11 @@ export type UserNoisePrefs = {
   noiseVolume: number;
 };
 
-export function readLocalPremium(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return localStorage.getItem(PREMIUM_LOCAL_STORAGE_KEY) === "true";
-  } catch {
-    return false;
-  }
-}
-
-export function writeLocalPremium(isPremium: boolean): void {
+/** 端末に残った旧フラグを削除（ログアウト時など）。premium の source of truth は DB のみ。 */
+export function clearPremiumLocalStorage(): void {
   if (typeof window === "undefined") return;
   try {
-    if (isPremium) localStorage.setItem(PREMIUM_LOCAL_STORAGE_KEY, "true");
-    else localStorage.removeItem(PREMIUM_LOCAL_STORAGE_KEY);
+    localStorage.removeItem(PREMIUM_LOCAL_STORAGE_KEY);
   } catch {
     // ignore
   }
