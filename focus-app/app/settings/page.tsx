@@ -105,7 +105,7 @@ export default function SettingsPage() {
             <span className="text-white/35">›</span>
           </Link>
           <p className="text-[11px] text-white/35 px-1 -mt-1 leading-relaxed">
-            全画面はホーム右上のボタンから切り替えられます。
+            全画面はホーム右上の設定メニューから切り替えられます。
           </p>
           <Link href="/?settings=premium" className={rowClass}>
             <span>プレミアムについて</span>

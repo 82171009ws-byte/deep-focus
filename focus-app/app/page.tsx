@@ -453,6 +453,7 @@ export default function Home() {
   const [premiumCheckoutError, setPremiumCheckoutError] = useState<string | null>(null);
   const [isFullscreenMode, setIsFullscreenMode] = useState(false);
   const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
+  const [isQuickSettingsOpen, setIsQuickSettingsOpen] = useState(false);
   const [isAppMenuOpen, setIsAppMenuOpen] = useState(false);
   const [selectedNoise, setSelectedNoise] = useState(() => loadNoise().selectedNoise);
   const [selectedNoise2, setSelectedNoise2] = useState(() => loadNoise().selectedNoise2);
@@ -943,11 +944,19 @@ export default function Home() {
         exitFullscreen();
         if (isPremiumNoiseUpsellOpen) setIsPremiumNoiseUpsellOpen(false);
         else if (isNoiseModalOpen) setIsNoiseModalOpen(false);
+        else if (isThemeModalOpen) setIsThemeModalOpen(false);
+        else if (isQuickSettingsOpen) setIsQuickSettingsOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [exitFullscreen, isNoiseModalOpen, isPremiumNoiseUpsellOpen]);
+  }, [
+    exitFullscreen,
+    isNoiseModalOpen,
+    isPremiumNoiseUpsellOpen,
+    isThemeModalOpen,
+    isQuickSettingsOpen,
+  ]);
 
   useEffect(() => {
     if (!isPremiumNoiseUpsellOpen) {
@@ -1241,16 +1250,76 @@ export default function Home() {
         aria-hidden
       />
       {!isFullscreenMode && (
-        <div className="fixed z-[59] top-[max(12px,env(safe-area-inset-top))] right-[max(12px,env(safe-area-inset-right))]">
-          <button
-            type="button"
-            onClick={enterFullscreen}
-            className={chromeButtonClass}
-            aria-label="全画面"
-          >
-            <span aria-hidden>⛶</span>
-          </button>
-        </div>
+        <>
+          {isQuickSettingsOpen ? (
+            <div
+              className="fixed inset-0 z-[58] bg-black/35"
+              aria-hidden
+              onClick={() => setIsQuickSettingsOpen(false)}
+            />
+          ) : null}
+          <div className="fixed z-[59] top-[max(12px,env(safe-area-inset-top))] right-[max(12px,env(safe-area-inset-right))] flex flex-col items-end gap-2">
+            <button
+              type="button"
+              onClick={() => setIsQuickSettingsOpen((o) => !o)}
+              className={chromeButtonClass}
+              aria-label={isQuickSettingsOpen ? "設定メニューを閉じる" : "設定メニューを開く"}
+              aria-expanded={isQuickSettingsOpen}
+              aria-haspopup="menu"
+            >
+              <svg
+                className="h-[22px] w-[22px] text-white/90"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden
+              >
+                <path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.06-.7-1.67-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.61.24-1.17.57-1.67.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.06.7 1.67.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.61-.24 1.17-.57 1.67-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
+              </svg>
+            </button>
+            {isQuickSettingsOpen ? (
+              <div
+                role="menu"
+                aria-label="クイック設定"
+                className="w-[min(15rem,calc(100vw-24px))] overflow-hidden rounded-2xl border border-white/18 bg-[#0a0e14]/92 py-1 text-white shadow-xl backdrop-blur-md"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full min-h-[44px] items-center px-4 py-2.5 text-left text-[15px] font-medium text-white/90 transition hover:bg-white/10 active:bg-white/12"
+                  onClick={() => {
+                    setIsQuickSettingsOpen(false);
+                    enterFullscreen();
+                  }}
+                >
+                  全画面
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full min-h-[44px] items-center px-4 py-2.5 text-left text-[15px] font-medium text-white/90 transition hover:bg-white/10 active:bg-white/12"
+                  onClick={() => {
+                    setIsQuickSettingsOpen(false);
+                    setIsThemeModalOpen(true);
+                  }}
+                >
+                  テーマ
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full min-h-[44px] items-center px-4 py-2.5 text-left text-[15px] font-medium text-white/90 transition hover:bg-white/10 active:bg-white/12"
+                  onClick={() => {
+                    setIsQuickSettingsOpen(false);
+                    setIsPremiumNoiseUpsellOpen(false);
+                    setIsNoiseModalOpen(true);
+                  }}
+                >
+                  ホワイトノイズ
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </>
       )}
       <div className="relative flex flex-1 flex-col items-center justify-center px-5 pt-16 pb-[max(24px,env(safe-area-inset-bottom))] text-white min-h-0 sm:px-6">
         <div className="flex w-full max-w-sm flex-col items-center gap-4 sm:max-w-md sm:gap-5">
@@ -1775,7 +1844,10 @@ export default function Home() {
       <div className="fixed z-[59] top-[max(12px,env(safe-area-inset-top))] left-[max(12px,env(safe-area-inset-left))] flex items-center gap-2">
         <button
           type="button"
-          onClick={() => setIsAppMenuOpen(true)}
+          onClick={() => {
+            setIsQuickSettingsOpen(false);
+            setIsAppMenuOpen(true);
+          }}
           className={chromeButtonClass}
           aria-label="メニューを開く"
           aria-expanded={isAppMenuOpen}
