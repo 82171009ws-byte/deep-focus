@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { fetchUserNoisePrefs, fetchUserPremium, upsertUserNoisePrefs } from "@/lib/userProfile";
+import {
+  clearPremiumLocalStorage,
+  fetchUserNoisePrefs,
+  fetchUserPremium,
+  upsertUserNoisePrefs,
+} from "@/lib/userProfile";
 import { loadTasksFromLocalStorage, persistTasksToLocalStorage, type Task } from "@/lib/tasksLocal";
 import { persistSelectedTaskIdToSupabase, updateTaskInSupabase } from "@/lib/tasksSupabase";
 import {
@@ -609,7 +614,8 @@ export default function Home() {
       .then(({ data }) => {
         if (!mounted) return;
         const session = data.session ?? null;
-        setAuthUserId(session?.user?.id ?? null);
+        const uid = session?.user?.id ?? null;
+        setAuthUserId(uid);
         syncPremium(session);
         syncNoise(session);
         void syncTasksSession(session);
@@ -634,7 +640,8 @@ export default function Home() {
     try {
       const onAuth = supabase.auth.onAuthStateChange((_event, session) => {
         if (!mounted) return;
-        setAuthUserId(session?.user?.id ?? null);
+        const uid = session?.user?.id ?? null;
+        setAuthUserId(uid);
         syncPremium(session);
         syncNoise(session);
         void syncTasksSession(session);
@@ -658,6 +665,8 @@ export default function Home() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(() => loadSelectedTaskId());
 
   const [authUserId, setAuthUserId] = useState<string | null>(null);
+  const isLoggedIn = Boolean(authUserId);
+  const [logoutLoading, setLogoutLoading] = useState(false);
 
   const settingsQueryHandlersRef = useRef<HomeSettingsHandlers>({
     openTheme: () => {},
@@ -1160,6 +1169,26 @@ export default function Home() {
     }
   }, []);
 
+  const handleLogout = useCallback(async () => {
+    setLogoutLoading(true);
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error("[auth] signOut:", error.message);
+        setLogoutLoading(false);
+        return;
+      }
+      clearPremiumLocalStorage();
+      setIsQuickSettingsOpen(false);
+      setIsTaskQuickPickerOpen(false);
+      setIsAppMenuOpen(false);
+      setLogoutLoading(false);
+    } catch (e) {
+      console.error("[auth] signOut:", e);
+      setLogoutLoading(false);
+    }
+  }, []);
+
   const minutes = Math.floor(seconds / 60);
   const secs = seconds % 60;
   const selectedTask = selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) ?? null : null;
@@ -1322,7 +1351,7 @@ export default function Home() {
               onClick={() => setIsQuickSettingsOpen(false)}
             />
           ) : null}
-          <div className="fixed z-[59] top-[max(12px,env(safe-area-inset-top))] right-[max(12px,env(safe-area-inset-right))] flex flex-col items-end gap-2">
+          <div className="fixed z-[59] top-[max(16px,calc(env(safe-area-inset-top)+8px))] right-[max(12px,env(safe-area-inset-right))] flex flex-col items-end gap-2">
             <button
               type="button"
               onClick={() => {
@@ -1383,6 +1412,26 @@ export default function Home() {
                 >
                   ホワイトノイズ
                 </button>
+                <div className="mx-3 border-t border-white/10" />
+                {isLoggedIn ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={logoutLoading}
+                    className="flex w-full min-h-[44px] items-center px-4 py-2.5 text-left text-[15px] font-medium text-white/90 transition hover:bg-white/10 active:bg-white/12 disabled:opacity-50"
+                    onClick={() => void handleLogout()}
+                  >
+                    {logoutLoading ? "ログアウト中…" : "ログアウト"}
+                  </button>
+                ) : (
+                  <Link
+                    href="/login"
+                    className="flex w-full min-h-[44px] items-center px-4 py-2.5 text-left text-[15px] font-medium text-white/90 transition hover:bg-white/10 active:bg-white/12"
+                    onClick={() => setIsQuickSettingsOpen(false)}
+                  >
+                    ログイン
+                  </Link>
+                )}
               </div>
             ) : null}
           </div>
@@ -1390,7 +1439,7 @@ export default function Home() {
       )}
       <div className="relative flex min-h-0 flex-1 flex-col px-5 pb-[max(20px,env(safe-area-inset-bottom))] text-white sm:px-6">
         {/* 上部: タスク（固定高さ帯・主ブロックの上に補助として配置） */}
-        <div className="relative mx-auto w-full max-w-sm shrink-0 space-y-1.5 pt-[max(12px,calc(env(safe-area-inset-top)+52px))] pb-2 sm:max-w-md sm:pb-3">
+        <div className="relative mx-auto w-full max-w-sm shrink-0 space-y-1.5 pt-[max(18px,calc(env(safe-area-inset-top)+58px))] pb-2 sm:max-w-md sm:pt-[max(20px,calc(env(safe-area-inset-top)+60px))] sm:pb-3">
           <p className="text-[10px] font-medium tracking-[0.16em] text-white/38">現在のタスク</p>
           <div className={isTaskQuickPickerOpen ? "relative z-[60]" : "relative"}>
             {isTaskQuickPickerOpen ? (
@@ -1986,7 +2035,7 @@ export default function Home() {
       </Suspense>
 
       {/* 左上: ハンバーガー（ビューポート固定・全画面時は閉じるボタンを隣に並べる） */}
-      <div className="fixed z-[59] top-[max(12px,env(safe-area-inset-top))] left-[max(12px,env(safe-area-inset-left))] flex items-center gap-2">
+      <div className="fixed z-[59] top-[max(16px,calc(env(safe-area-inset-top)+8px))] left-[max(12px,env(safe-area-inset-left))] flex items-center gap-2">
         <button
           type="button"
           onClick={() => {
@@ -2024,7 +2073,13 @@ export default function Home() {
       {themeModal}
       {stopConfirmModal}
 
-      <AppMenuDrawer open={isAppMenuOpen} onClose={() => setIsAppMenuOpen(false)} />
+      <AppMenuDrawer
+        open={isAppMenuOpen}
+        onClose={() => setIsAppMenuOpen(false)}
+        isLoggedIn={isLoggedIn}
+        logoutLoading={logoutLoading}
+        onLogout={handleLogout}
+      />
     </main>
   );
 }

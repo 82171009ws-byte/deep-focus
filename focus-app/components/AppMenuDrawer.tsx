@@ -8,9 +8,18 @@ const PANEL_MS = 320;
 export type AppMenuDrawerProps = {
   open: boolean;
   onClose: () => void;
+  isLoggedIn: boolean;
+  logoutLoading: boolean;
+  onLogout: () => void | Promise<void>;
 };
 
-export function AppMenuDrawer({ open, onClose }: AppMenuDrawerProps) {
+export function AppMenuDrawer({
+  open,
+  onClose,
+  isLoggedIn,
+  logoutLoading,
+  onLogout,
+}: AppMenuDrawerProps) {
   const [present, setPresent] = useState(false);
   const [entered, setEntered] = useState(false);
 
@@ -75,7 +84,7 @@ export function AppMenuDrawer({ open, onClose }: AppMenuDrawerProps) {
     >
       <button
         type="button"
-        className={`absolute inset-0 bg-black/60 backdrop-blur-[3px] transition-opacity duration-[320ms] ease-in-out ${
+        className={`absolute inset-0 bg-black/70 backdrop-blur-[3px] transition-opacity duration-[320ms] ease-in-out ${
           entered ? "opacity-100" : "opacity-0"
         }`}
         onClick={onClose}
@@ -83,7 +92,7 @@ export function AppMenuDrawer({ open, onClose }: AppMenuDrawerProps) {
       />
 
       <aside
-        className={`relative h-full w-[min(280px,calc(100vw-24px))] shrink-0 flex flex-col bg-[#0c1016]/95 border-r border-white/10 shadow-2xl backdrop-blur-md transition-transform duration-[320ms] ease-in-out ${
+        className={`relative h-full w-[min(280px,calc(100vw-24px))] shrink-0 flex flex-col bg-[#0c1016]/95 border-r border-white/10 shadow-2xl backdrop-blur-md pt-[env(safe-area-inset-top)] transition-transform duration-[320ms] ease-in-out ${
           entered ? "translate-x-0" : "-translate-x-full"
         }`}
         onClick={(e) => e.stopPropagation()}
@@ -114,6 +123,25 @@ export function AppMenuDrawer({ open, onClose }: AppMenuDrawerProps) {
             設定
           </Link>
         </nav>
+        <div className="shrink-0 border-t border-white/10 p-3">
+          {isLoggedIn ? (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                void onLogout();
+              }}
+              disabled={logoutLoading}
+              className={`${itemClass} px-3 py-2.5 disabled:opacity-50`}
+            >
+              {logoutLoading ? "ログアウト中…" : "ログアウト"}
+            </button>
+          ) : (
+            <Link href="/login" onClick={onClose} className={itemClass}>
+              ログイン
+            </Link>
+          )}
+        </div>
       </aside>
     </div>
   );
