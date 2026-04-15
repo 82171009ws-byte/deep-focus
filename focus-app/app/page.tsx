@@ -441,6 +441,51 @@ function loadBackgroundTheme(): BackgroundThemeKey {
   return DEFAULT_BACKGROUND_THEME;
 }
 
+/** 12時起点・時計回りの円周進捗（中央はクリア） */
+function TimerProgressRing({
+  elapsedRatio,
+  className,
+  strokeWidth = 3.25,
+}: {
+  elapsedRatio: number;
+  className?: string;
+  strokeWidth?: number;
+}) {
+  const r = 44;
+  const circumference = 2 * Math.PI * r;
+  const p = Math.min(1, Math.max(0, elapsedRatio));
+  const dashOffset = circumference * (1 - p);
+
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 100 100"
+      fill="none"
+      aria-hidden
+    >
+      <g transform="rotate(-90 50 50)">
+        <circle
+          cx="50"
+          cy="50"
+          r={r}
+          stroke="rgba(255,255,255,0.14)"
+          strokeWidth={strokeWidth}
+        />
+        <circle
+          cx="50"
+          cy="50"
+          r={r}
+          stroke="rgba(255,255,255,0.52)"
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={dashOffset}
+        />
+      </g>
+    </svg>
+  );
+}
+
 // -----------------------------------------------------------------------------
 // Page
 // -----------------------------------------------------------------------------
@@ -1473,11 +1518,10 @@ export default function Home() {
                 aria-hidden
               />
             )}
-            <div
-              className="absolute inset-0 rounded-full border-2 border-transparent"
-              style={{
-                background: `conic-gradient(from 0deg, rgba(255,255,255,0.5) 0deg, rgba(255,255,255,0.5) ${elapsedRatio * 360}deg, transparent ${elapsedRatio * 360}deg)`,
-              }}
+            <TimerProgressRing
+              elapsedRatio={elapsedRatio}
+              strokeWidth={3.25}
+              className="pointer-events-none absolute inset-0 h-full w-full p-[5px]"
             />
             <div className="relative z-10 text-center px-2">
               <span className="text-[clamp(2.75rem,11vw,4.5rem)] font-extralight tabular-nums tracking-[0.08em] text-white/95">
@@ -1591,11 +1635,10 @@ export default function Home() {
             height: "clamp(280px, 80vw, 520px)",
           }}
         >
-          <div
-            className="absolute inset-0 rounded-full border-2 border-transparent"
-            style={{
-              background: `conic-gradient(from 0deg, rgba(255,255,255,0.55) 0deg, rgba(255,255,255,0.55) ${elapsedRatio * 360}deg, transparent ${elapsedRatio * 360}deg)`,
-            }}
+          <TimerProgressRing
+            elapsedRatio={elapsedRatio}
+            strokeWidth={3.75}
+            className="pointer-events-none absolute inset-0 h-full w-full p-[6px]"
           />
           <div className="relative z-10 text-center">
             <div className="text-[clamp(3.5rem,12vw,6rem)] font-light tabular-nums tracking-wider">
