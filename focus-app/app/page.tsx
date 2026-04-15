@@ -1113,8 +1113,6 @@ export default function Home() {
   const mainButtonClass = isPaused
     ? "w-full px-5 py-3 rounded-full text-sm font-medium"
     : "w-full px-8 py-4 rounded-full text-base font-medium";
-  const contentGapClass = isPaused ? "gap-6 sm:gap-8" : "gap-8 sm:gap-10";
-
   settingsQueryHandlersRef.current = {
     openTheme: () => setIsThemeModalOpen(true),
     openNoise: () => {
@@ -1254,8 +1252,35 @@ export default function Home() {
           </button>
         </div>
       )}
-      <div className="relative flex flex-1 flex-col items-center justify-center px-6 pt-16 pb-[max(24px,env(safe-area-inset-bottom))] text-white min-h-0">
-        <div className={`flex w-full max-w-md flex-col items-center ${contentGapClass}`}>
+      <div className="relative flex flex-1 flex-col items-center justify-center px-5 pt-16 pb-[max(24px,env(safe-area-inset-bottom))] text-white min-h-0 sm:px-6">
+        <div className="flex w-full max-w-sm flex-col items-center gap-4 sm:max-w-md sm:gap-5">
+          {/* 現在のタスク（タイマー直上・1行・/tasks） */}
+          <div className="w-full shrink-0 space-y-1.5">
+            <p className="text-[10px] font-medium tracking-[0.16em] text-white/38">現在のタスク</p>
+            <Link
+              href="/tasks"
+              aria-label={
+                authUserId && tasksRemoteLoading
+                  ? "タスク一覧を開く"
+                  : selectedTask
+                    ? `「${selectedTask.title}」のタスクを変更`
+                    : "タスクを選択"
+              }
+              className="flex w-full min-h-[44px] items-center gap-2 rounded-2xl border border-white/12 bg-black/25 px-3 py-2.5 backdrop-blur-sm transition hover:border-white/18 hover:bg-black/30"
+            >
+              <span className="min-w-0 flex-1 truncate text-left text-[15px] font-normal leading-snug text-white/88 sm:text-sm">
+                {authUserId && tasksRemoteLoading
+                  ? "読み込み中…"
+                  : selectedTask
+                    ? selectedTask.title
+                    : "タスクを選択"}
+              </span>
+              <span className="shrink-0 pl-1 text-[11px] font-medium tabular-nums text-white/48 underline decoration-white/25 underline-offset-[3px]">
+                変更
+              </span>
+            </Link>
+          </div>
+
           <div
             className={`relative flex aspect-square w-[min(17rem,72vw)] max-h-[38vh] items-center justify-center rounded-full border-2 border-white/25 transition sm:w-72 sm:max-h-[42vh] ${
               justCompletedWork ? "border-white/70 shadow-xl animate-pulse" : ""
@@ -1362,22 +1387,6 @@ export default function Home() {
               </button>
             )}
           </div>
-
-          <Link
-            href="/tasks"
-            className="mt-1 w-full max-w-sm text-center text-[11px] leading-snug text-white/40 underline decoration-white/15 underline-offset-[5px] transition hover:text-white/65 hover:decoration-white/30"
-          >
-            {authUserId && tasksRemoteLoading ? (
-              "タスクを読み込み中…"
-            ) : selectedTask ? (
-              <>
-                <span className="block text-white/38">現在のタスク</span>
-                <span className="mt-0.5 block truncate px-1 text-white/55">{selectedTask.title}</span>
-              </>
-            ) : (
-              "タスクを選択"
-            )}
-          </Link>
         </div>
       </div>
     </div>
