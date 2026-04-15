@@ -33,6 +33,8 @@ type BackgroundThemeKey =
   | "sea"
   | "desert"
   | "snow"
+  | "forest"
+  | "ocean"
   | "night"
   | "mint"
   | "peach"
@@ -214,6 +216,9 @@ interface BackgroundTheme {
   label: string;
   backgroundImage: string;
   overlay: string;
+  // 将来拡張用: テーマ別の推奨ノイズ・発光演出などを追加しやすくしておく
+  recommendedNoise?: string[];
+  accentGlow?: string;
 }
 
 const BACKGROUND_THEMES: BackgroundTheme[] = [
@@ -242,12 +247,34 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
     overlay: "rgba(0,0,0,0.28)",
   },
   {
+    key: "forest",
+    type: "immersive",
+    label: "Forest",
+    backgroundImage:
+      "radial-gradient(circle at 18% 10%, rgba(205,255,222,0.18) 0%, rgba(205,255,222,0) 40%), radial-gradient(circle at 84% 78%, rgba(68,160,112,0.16) 0%, rgba(68,160,112,0) 45%), linear-gradient(158deg, #061710 0%, #123828 48%, #1f4d33 100%)",
+    overlay: "rgba(0,0,0,0.36)",
+    recommendedNoise: ["seseragi", "takibi"],
+    accentGlow: "rgba(46, 204, 113, 0.22)",
+  },
+  {
+    key: "ocean",
+    type: "immersive",
+    label: "Ocean",
+    backgroundImage:
+      "radial-gradient(circle at 22% 12%, rgba(214,240,255,0.20) 0%, rgba(214,240,255,0) 42%), radial-gradient(circle at 78% 80%, rgba(69,166,214,0.16) 0%, rgba(69,166,214,0) 48%), linear-gradient(162deg, #071a2a 0%, #0f3c67 50%, #1f6a8f 100%)",
+    overlay: "rgba(0,0,0,0.32)",
+    recommendedNoise: ["ocean", "rain"],
+    accentGlow: "rgba(94, 201, 255, 0.2)",
+  },
+  {
     key: "night",
     type: "immersive",
-    label: "夜空",
+    label: "Night",
     backgroundImage:
-      "radial-gradient(circle at 70% 20%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 35%), radial-gradient(circle at 20% 60%, rgba(144,97,255,0.20) 0%, rgba(144,97,255,0) 40%), linear-gradient(160deg, #05040f 0%, #0b0f2a 55%, #02030a 100%)",
-    overlay: "rgba(0,0,0,0.35)",
+      "radial-gradient(circle at 74% 18%, rgba(190,210,255,0.14) 0%, rgba(190,210,255,0) 36%), radial-gradient(circle at 14% 72%, rgba(114,133,255,0.14) 0%, rgba(114,133,255,0) 44%), linear-gradient(160deg, #03060f 0%, #0a1730 54%, #020713 100%)",
+    overlay: "rgba(0,0,0,0.38)",
+    recommendedNoise: ["none", "tick"],
+    accentGlow: "rgba(130, 154, 255, 0.18)",
   },
   {
     key: "mint",
@@ -436,6 +463,8 @@ function loadBackgroundTheme(): BackgroundThemeKey {
     raw === "sea" ||
     raw === "desert" ||
     raw === "snow" ||
+    raw === "forest" ||
+    raw === "ocean" ||
     raw === "night" ||
     raw === "mint" ||
     raw === "peach" ||
@@ -1286,8 +1315,12 @@ export default function Home() {
                         ? "乾いた夕暮れ"
                         : t.key === "snow"
                           ? "澄んだ雪景色"
+                          : t.key === "forest"
+                            ? "深く穏やかな森"
+                            : t.key === "ocean"
+                              ? "透明感のある海辺"
                           : t.key === "night"
-                            ? "深い夜空"
+                            ? "洗練された夜の静けさ"
                             : t.key === "mint"
                               ? "明るいミント"
                               : t.key === "peach"

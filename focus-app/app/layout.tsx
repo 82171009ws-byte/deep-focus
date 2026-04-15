@@ -40,7 +40,6 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#0b0f14",
-  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -51,7 +50,7 @@ export default function RootLayout({
   return (
     <html lang="ja">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {children}
         <Analytics />
