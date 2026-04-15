@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { fetchUserNoisePrefs, fetchUserPremium, upsertUserNoisePrefs } from "@/lib/userProfile";
 import { loadTasksFromLocalStorage, persistTasksToLocalStorage, type Task } from "@/lib/tasksLocal";
@@ -454,6 +454,7 @@ export default function Home() {
   const [isFullscreenMode, setIsFullscreenMode] = useState(false);
   const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
   const [isQuickSettingsOpen, setIsQuickSettingsOpen] = useState(false);
+  const [isTaskQuickPickerOpen, setIsTaskQuickPickerOpen] = useState(false);
   const [isAppMenuOpen, setIsAppMenuOpen] = useState(false);
   const [selectedNoise, setSelectedNoise] = useState(() => loadNoise().selectedNoise);
   const [selectedNoise2, setSelectedNoise2] = useState(() => loadNoise().selectedNoise2);
@@ -938,6 +939,18 @@ export default function Home() {
     }
   }, []);
 
+  const openTaskQuickPicker = useCallback(() => {
+    setIsQuickSettingsOpen(false);
+    setIsAppMenuOpen(false);
+    setIsTaskQuickPickerOpen(true);
+  }, []);
+
+  const toggleTaskQuickPicker = useCallback(() => {
+    setIsQuickSettingsOpen(false);
+    setIsAppMenuOpen(false);
+    setIsTaskQuickPickerOpen((v) => !v);
+  }, []);
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -946,6 +959,7 @@ export default function Home() {
         else if (isNoiseModalOpen) setIsNoiseModalOpen(false);
         else if (isThemeModalOpen) setIsThemeModalOpen(false);
         else if (isQuickSettingsOpen) setIsQuickSettingsOpen(false);
+        else if (isTaskQuickPickerOpen) setIsTaskQuickPickerOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -956,6 +970,7 @@ export default function Home() {
     isPremiumNoiseUpsellOpen,
     isThemeModalOpen,
     isQuickSettingsOpen,
+    isTaskQuickPickerOpen,
   ]);
 
   useEffect(() => {
@@ -1103,6 +1118,10 @@ export default function Home() {
   const minutes = Math.floor(seconds / 60);
   const secs = seconds % 60;
   const selectedTask = selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) ?? null : null;
+  const incompleteTasksForPicker = useMemo(
+    () => tasks.filter((t) => !t.completed).slice(0, 5),
+    [tasks]
+  );
   const modeSeconds = getModeSeconds(mode, focusPreset);
   const elapsedRatio = seconds <= 0 ? 0 : 1 - Math.min(1, Math.max(0, seconds / modeSeconds));
 
@@ -1261,7 +1280,10 @@ export default function Home() {
           <div className="fixed z-[59] top-[max(12px,env(safe-area-inset-top))] right-[max(12px,env(safe-area-inset-right))] flex flex-col items-end gap-2">
             <button
               type="button"
-              onClick={() => setIsQuickSettingsOpen((o) => !o)}
+              onClick={() => {
+                setIsTaskQuickPickerOpen(false);
+                setIsQuickSettingsOpen((o) => !o);
+              }}
               className={chromeButtonClass}
               aria-label={isQuickSettingsOpen ? "設定メニューを閉じる" : "設定メニューを開く"}
               aria-expanded={isQuickSettingsOpen}
@@ -1323,31 +1345,110 @@ export default function Home() {
       )}
       <div className="relative flex flex-1 flex-col items-center justify-center px-5 pt-16 pb-[max(24px,env(safe-area-inset-bottom))] text-white min-h-0 sm:px-6">
         <div className="flex w-full max-w-sm flex-col items-center gap-4 sm:max-w-md sm:gap-5">
-          {/* 現在のタスク（タイマー直上・1行・/tasks） */}
+          {/* 現在のタスク（タイマー直上・クイック選択 /tasks へも） */}
           <div className="w-full shrink-0 space-y-1.5">
             <p className="text-[10px] font-medium tracking-[0.16em] text-white/38">現在のタスク</p>
-            <Link
-              href="/tasks"
-              aria-label={
-                authUserId && tasksRemoteLoading
-                  ? "タスク一覧を開く"
-                  : selectedTask
-                    ? `「${selectedTask.title}」のタスクを変更`
-                    : "タスクを選択"
-              }
-              className="flex w-full min-h-[44px] items-center gap-2 rounded-2xl border border-white/12 bg-black/25 px-3 py-2.5 backdrop-blur-sm transition hover:border-white/18 hover:bg-black/30"
-            >
-              <span className="min-w-0 flex-1 truncate text-left text-[15px] font-normal leading-snug text-white/88 sm:text-sm">
-                {authUserId && tasksRemoteLoading
-                  ? "読み込み中…"
-                  : selectedTask
-                    ? selectedTask.title
-                    : "タスクを選択"}
-              </span>
-              <span className="shrink-0 pl-1 text-[11px] font-medium tabular-nums text-white/48 underline decoration-white/25 underline-offset-[3px]">
-                変更
-              </span>
-            </Link>
+            <div className={isTaskQuickPickerOpen ? "relative z-[60]" : "relative"}>
+              {isTaskQuickPickerOpen ? (
+                <div
+                  className="fixed inset-0 z-[58] bg-black/35"
+                  aria-hidden
+                  onClick={() => setIsTaskQuickPickerOpen(false)}
+                />
+              ) : null}
+              <div className="flex w-full min-h-[44px] overflow-hidden rounded-2xl border border-white/12 bg-black/25 backdrop-blur-sm transition hover:border-white/18 hover:bg-black/30">
+                <button
+                  type="button"
+                  onClick={toggleTaskQuickPicker}
+                  aria-expanded={isTaskQuickPickerOpen}
+                  aria-haspopup="listbox"
+                  aria-label={
+                    authUserId && tasksRemoteLoading
+                      ? "タスク一覧を開く"
+                      : selectedTask
+                        ? `「${selectedTask.title}」のタスクを変更`
+                        : "タスクを選択"
+                  }
+                  className="flex min-h-[44px] min-w-0 flex-1 items-center px-3 py-2.5 text-left text-[15px] font-normal leading-snug text-white/88 transition hover:bg-white/[0.06] sm:text-sm"
+                >
+                  <span className="min-w-0 flex-1 truncate">
+                    {authUserId && tasksRemoteLoading
+                      ? "読み込み中…"
+                      : selectedTask
+                        ? selectedTask.title
+                        : "タスクを選択"}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={openTaskQuickPicker}
+                  className="shrink-0 border-l border-white/12 px-3 py-2.5 text-[11px] font-medium tabular-nums text-white/70 underline decoration-white/25 underline-offset-[3px] transition hover:bg-white/[0.06] hover:text-white/85"
+                >
+                  変更
+                </button>
+              </div>
+              {isTaskQuickPickerOpen ? (
+                <div
+                  role="listbox"
+                  aria-label="タスクを選択"
+                  className="absolute left-0 right-0 top-full z-[59] mt-1.5 overflow-hidden rounded-2xl border border-white/18 bg-[#0a0e14]/95 py-1 text-left shadow-xl backdrop-blur-md"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {authUserId && tasksRemoteLoading ? (
+                    <p className="px-4 py-3 text-[15px] text-white/55">読み込み中…</p>
+                  ) : incompleteTasksForPicker.length === 0 ? (
+                    <p className="px-4 py-3 text-[15px] leading-snug text-white/55">
+                      未完了のタスクがありません
+                    </p>
+                  ) : (
+                    <ul className="max-h-[min(280px,45vh)] overflow-y-auto py-0.5">
+                      {incompleteTasksForPicker.map((t) => {
+                        const active = t.id === selectedTaskId;
+                        return (
+                          <li key={t.id}>
+                            <button
+                              type="button"
+                              role="option"
+                              aria-selected={active}
+                              onClick={() => {
+                                setSelectedTaskId(t.id);
+                                setIsTaskQuickPickerOpen(false);
+                              }}
+                              className={`flex w-full min-h-[44px] items-center gap-2 px-4 py-2.5 text-left text-[15px] transition ${
+                                active
+                                  ? "bg-white/14 font-medium text-white ring-1 ring-inset ring-white/20"
+                                  : "text-white/88 hover:bg-white/10"
+                              }`}
+                            >
+                              <span
+                                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] leading-none ${
+                                  active
+                                    ? "border-emerald-400/50 bg-emerald-400/15 text-emerald-100"
+                                    : "border-white/15 bg-transparent"
+                                }`}
+                                aria-hidden
+                              >
+                                {active ? "✓" : null}
+                              </span>
+                              <span className="min-w-0 flex-1 truncate">{t.title}</span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                  <div className="border-t border-white/10 px-1 pb-1 pt-0.5">
+                    <Link
+                      href="/tasks"
+                      onClick={() => setIsTaskQuickPickerOpen(false)}
+                      className="flex min-h-[44px] w-full items-center justify-center rounded-xl px-3 text-[14px] font-medium text-white/65 transition hover:bg-white/10 hover:text-white/90"
+                    >
+                      すべてのタスクを見る
+                    </Link>
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
 
           <div
@@ -1846,6 +1947,7 @@ export default function Home() {
           type="button"
           onClick={() => {
             setIsQuickSettingsOpen(false);
+            setIsTaskQuickPickerOpen(false);
             setIsAppMenuOpen(true);
           }}
           className={chromeButtonClass}
