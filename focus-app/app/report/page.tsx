@@ -91,12 +91,29 @@ export default function ReportPage() {
           <p className="mt-2 text-sm text-white/55">今日（{todayKey()}）の記録です。</p>
         </div>
 
-        <dl className="space-y-4 rounded-2xl border border-white/10 bg-white/5 p-5 text-sm">
-          <div className="flex justify-between gap-4">
-            <dt className="text-white/60">完了ポモ</dt>
-            <dd className="font-medium tabular-nums text-white/90">
-              {completedPomos} / 目標 {dailyGoal}
-            </dd>
+        <dl className="space-y-5 rounded-2xl border border-white/10 bg-white/5 p-6 text-sm">
+          <div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-white/60">完了ポモ</dt>
+              <dd className="font-medium tabular-nums text-white/90">
+                {completedPomos} / {dailyGoal}
+              </dd>
+            </div>
+            <div
+              className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10"
+              role="progressbar"
+              aria-valuenow={Math.min(completedPomos, dailyGoal)}
+              aria-valuemin={0}
+              aria-valuemax={dailyGoal}
+            >
+              <div
+                className="h-full rounded-full bg-white/45 transition-[width]"
+                style={{ width: `${Math.min(100, dailyGoal > 0 ? (completedPomos / dailyGoal) * 100 : 0)}%` }}
+              />
+            </div>
+            <p className="mt-2 text-[11px] text-white/40">
+              {completedPomos >= dailyGoal ? "今日の目標を達成しています" : `目標まであと ${Math.max(0, dailyGoal - completedPomos)} ポモ`}
+            </p>
           </div>
           <div className="flex justify-between gap-4">
             <dt className="text-white/60">集中時間（記録分）</dt>

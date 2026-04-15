@@ -1,43 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 const PANEL_MS = 320;
 
 export type AppMenuDrawerProps = {
   open: boolean;
   onClose: () => void;
-  onOpenTasks: () => void;
-  onOpenSettings: () => void;
-  onOpenPremium: () => void;
-  showPlanManagement?: boolean;
-  onOpenPlanManagement?: () => void;
-  planManagementLoading?: boolean;
-  planManagementError?: string | null;
-  /** ログイン中のみ true（サイドバー最下部にログアウトを出す） */
-  showLogout?: boolean;
-  onLogout?: () => void | Promise<void>;
-  logoutLoading?: boolean;
-  /** 未ログイン時のみ true（メニューにログインリンクを出す） */
-  showLogin?: boolean;
 };
 
-export function AppMenuDrawer({
-  open,
-  onClose,
-  onOpenTasks,
-  onOpenSettings,
-  onOpenPremium,
-  showPlanManagement = false,
-  onOpenPlanManagement,
-  planManagementLoading = false,
-  planManagementError = null,
-  showLogout = false,
-  onLogout,
-  logoutLoading = false,
-  showLogin = false,
-}: AppMenuDrawerProps) {
+export function AppMenuDrawer({ open, onClose }: AppMenuDrawerProps) {
   const [present, setPresent] = useState(false);
   const [entered, setEntered] = useState(false);
 
@@ -88,25 +61,6 @@ export function AppMenuDrawer({
     };
   }, [present]);
 
-  const goTasks = useCallback(() => {
-    onClose();
-    onOpenTasks();
-  }, [onClose, onOpenTasks]);
-
-  const goSettings = useCallback(() => {
-    onClose();
-    onOpenSettings();
-  }, [onClose, onOpenSettings]);
-
-  const goPremium = useCallback(() => {
-    onClose();
-    onOpenPremium();
-  }, [onClose, onOpenPremium]);
-
-  const goPlanManagement = useCallback(() => {
-    onOpenPlanManagement?.();
-  }, [onOpenPlanManagement]);
-
   if (!present) return null;
 
   const itemClass =
@@ -150,57 +104,16 @@ export function AppMenuDrawer({
           <Link href="/" onClick={onClose} className={itemClass}>
             ホーム
           </Link>
-          <button type="button" onClick={goTasks} className={itemClass}>
+          <Link href="/tasks" onClick={onClose} className={itemClass}>
             タスク
-          </button>
+          </Link>
           <Link href="/report" onClick={onClose} className={itemClass}>
             レポート
           </Link>
-          <button type="button" onClick={goSettings} className={itemClass}>
+          <Link href="/settings" onClick={onClose} className={itemClass}>
             設定
-          </button>
-          <button type="button" onClick={goPremium} className={itemClass}>
-            プレミアム
-          </button>
-          {showLogin && (
-            <Link href="/login" onClick={onClose} className={itemClass}>
-              ログイン
-            </Link>
-          )}
-          {showPlanManagement && (
-            <>
-              <button
-                type="button"
-                onClick={goPlanManagement}
-                disabled={planManagementLoading}
-                className={`${itemClass} disabled:opacity-50 disabled:pointer-events-none`}
-              >
-                {planManagementLoading ? "プラン管理を開いています…" : "プラン管理"}
-              </button>
-              {planManagementError && (
-                <p
-                  className="mt-1 px-3 py-2 rounded-lg text-xs text-red-300/95 bg-red-500/15 border border-red-500/25 leading-snug"
-                  role="alert"
-                >
-                  {planManagementError}
-                </p>
-              )}
-            </>
-          )}
+          </Link>
         </nav>
-
-        {showLogout && onLogout && (
-          <div className="shrink-0 border-t border-white/10 px-3 py-3">
-            <button
-              type="button"
-              onClick={() => void onLogout()}
-              disabled={logoutLoading}
-              className={`${itemClass} text-white/70 hover:text-white hover:bg-white/10 border border-white/15`}
-            >
-              {logoutLoading ? "ログアウト中…" : "ログアウト"}
-            </button>
-          </div>
-        )}
       </aside>
     </div>
   );

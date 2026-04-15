@@ -1,26 +1,18 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import {
-  clearPremiumLocalStorage,
-  fetchUserNoisePrefs,
-  fetchUserPremium,
-  upsertUserNoisePrefs,
-} from "@/lib/userProfile";
+import { fetchUserNoisePrefs, fetchUserPremium, upsertUserNoisePrefs } from "@/lib/userProfile";
 import { loadTasksFromLocalStorage, persistTasksToLocalStorage, type Task } from "@/lib/tasksLocal";
-import {
-  deleteTaskFromSupabase,
-  insertTaskToSupabase,
-  persistSelectedTaskIdToSupabase,
-  updateTaskInSupabase,
-} from "@/lib/tasksSupabase";
+import { persistSelectedTaskIdToSupabase, updateTaskInSupabase } from "@/lib/tasksSupabase";
 import {
   hydrateLocalTasks,
   hydrateRemoteTasks,
   migrateLocalTasksIfNeeded,
 } from "@/lib/taskSessionSync";
 import { AppMenuDrawer } from "@/components/AppMenuDrawer";
+import { HomeSettingsFromQuery, type HomeSettingsHandlers } from "@/components/HomeSettingsFromQuery";
 
 // -----------------------------------------------------------------------------
 // Types
@@ -318,17 +310,13 @@ interface StreakState {
   achievedToday: boolean;
 }
 
-const DEFAULT_DAILY_GOAL = 4;
-
 const STORAGE_KEYS = {
   stats: (d: string) => `focus-stats-${d}`,
   selectedTask: "focus-selected-task",
   noise: "focus-noise",
   focusPreset: "focus-preset",
-  dailyGoal: "focus-daily-goal",
   backgroundTheme: "focus-background-theme",
   streak: "focus-streak",
-  showCompleted: "focus-show-completed",
 } as const;
 
 function getTodayKey() {
@@ -339,14 +327,6 @@ function shiftDateKey(dateKey: string, dayOffset: number) {
   const date = new Date(`${dateKey}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + dayOffset);
   return date.toISOString().slice(0, 10);
-}
-
-function formatDurationLabel(totalSeconds: number) {
-  const minutes = Math.floor(totalSeconds / 60);
-  if (minutes < 60) return `${minutes}分`;
-  const hours = Math.floor(minutes / 60);
-  const remainMinutes = minutes % 60;
-  return remainMinutes > 0 ? `${hours}時間${remainMinutes}分` : `${hours}時間`;
 }
 
 function loadStats(): DailyStats {
@@ -396,13 +376,6 @@ function loadStreak(): StreakState {
   } catch {
     return { currentStreak: 0, lastAchievedDate: null, achievedToday: false };
   }
-}
-
-function loadDailyGoal(): number {
-  if (typeof window === "undefined") return DEFAULT_DAILY_GOAL;
-  const raw = Number(localStorage.getItem(STORAGE_KEYS.dailyGoal));
-  if (!Number.isFinite(raw)) return DEFAULT_DAILY_GOAL;
-  return Math.min(20, Math.max(1, Math.floor(raw)));
 }
 
 function loadSelectedTaskId(): string | null {
@@ -468,28 +441,6 @@ function loadBackgroundTheme(): BackgroundThemeKey {
   return DEFAULT_BACKGROUND_THEME;
 }
 
-function loadShowCompleted(): boolean {
-  if (typeof window === "undefined") return false;
-  return localStorage.getItem(STORAGE_KEYS.showCompleted) === "true";
-}
-
-// -----------------------------------------------------------------------------
-// Flip digit (1 digit for mm:ss)
-// -----------------------------------------------------------------------------
-
-function FlipDigit({ digit }: { digit: string }) {
-  return (
-    <div className="relative flex flex-col items-center justify-center rounded-lg bg-[#0d0d0d] border border-white/10 overflow-hidden shadow-lg min-w-[clamp(3rem,12vw,5rem)] aspect-[3/4] max-h-[20vh] sm:max-h-[28vh]">
-      <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-[clamp(2rem,10vw,4.5rem)] font-black tabular-nums text-white/95 drop-shadow-md">
-          {digit}
-        </span>
-      </div>
-      <div className="absolute left-0 right-0 top-1/2 h-px bg-white/20" aria-hidden />
-    </div>
-  );
-}
-
 // -----------------------------------------------------------------------------
 // Page
 // -----------------------------------------------------------------------------
@@ -500,9 +451,6 @@ export default function Home() {
   const [isPremiumNoiseUpsellOpen, setIsPremiumNoiseUpsellOpen] = useState(false);
   const [premiumCheckoutLoading, setPremiumCheckoutLoading] = useState(false);
   const [premiumCheckoutError, setPremiumCheckoutError] = useState<string | null>(null);
-  const [planPortalLoading, setPlanPortalLoading] = useState(false);
-  const [planPortalError, setPlanPortalError] = useState<string | null>(null);
-  const [logoutLoading, setLogoutLoading] = useState(false);
   const [isFullscreenMode, setIsFullscreenMode] = useState(false);
   const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
   const [isAppMenuOpen, setIsAppMenuOpen] = useState(false);
@@ -516,7 +464,6 @@ export default function Home() {
   const [isFullscreenControlsVisible, setIsFullscreenControlsVisible] = useState(false);
   const [focusPreset, setFocusPreset] = useState<FocusPresetKey>(() => loadFocusPreset());
   const [streak, setStreak] = useState<StreakState>(() => loadStreak());
-  const [dailyGoalPomos, setDailyGoalPomos] = useState<number>(() => loadDailyGoal());
   const [backgroundTheme, setBackgroundTheme] = useState<BackgroundThemeKey>(() =>
     loadBackgroundTheme()
   );
@@ -660,12 +607,17 @@ export default function Home() {
   const [seconds, setSeconds] = useState(() => getModeSeconds("work", loadFocusPreset()));
   const [sessionIndex, setSessionIndex] = useState(1);
   const [tasks, setTasks] = useState<Task[]>(() => loadTasksFromLocalStorage());
-  const [input, setInput] = useState("");
   const [stats, setStats] = useState<DailyStats>(() => loadStats());
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(() => loadSelectedTaskId());
-  const [showCompletedTasks, setShowCompletedTasks] = useState(() => loadShowCompleted());
 
   const [authUserId, setAuthUserId] = useState<string | null>(null);
+
+  const settingsQueryHandlersRef = useRef<HomeSettingsHandlers>({
+    openTheme: () => {},
+    openNoise: () => {},
+    openPremium: () => {},
+    openBilling: () => {},
+  });
 
   const fullscreenRef = useRef<HTMLDivElement>(null);
   const audioRefs = useRef<HTMLAudioElement[]>([]);
@@ -826,11 +778,6 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    localStorage.setItem(STORAGE_KEYS.dailyGoal, String(dailyGoalPomos));
-  }, [dailyGoalPomos]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
     localStorage.setItem(STORAGE_KEYS.backgroundTheme, backgroundTheme);
   }, [backgroundTheme]);
 
@@ -952,11 +899,6 @@ export default function Home() {
     }
   }, [selectedTaskId, authUserId]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    localStorage.setItem(STORAGE_KEYS.showCompleted, String(showCompletedTasks));
-  }, [showCompletedTasks]);
-
   // Fullscreen API 同期
   useEffect(() => {
     const doc = typeof document !== "undefined" ? document : null;
@@ -1060,62 +1002,6 @@ export default function Home() {
     [isIdle, mode]
   );
 
-  const addTask = async () => {
-    const title = input.trim();
-    if (!title) return;
-    const newTask: Task = {
-      id: crypto.randomUUID(),
-      title,
-      completed: false,
-      actualPomodoros: 0,
-    };
-    if (authUserId) {
-      const ok = await insertTaskToSupabase(authUserId, newTask);
-      if (!ok) return;
-    }
-    setTasks((prev) => {
-      const next = [...prev, newTask];
-      if (!authUserId) persistTasksToLocalStorage(next);
-      return next;
-    });
-    setInput("");
-  };
-
-  const toggleTask = async (id: string) => {
-    const t = tasks.find((x) => x.id === id);
-    if (!t) return;
-    const updated: Task = { ...t, completed: !t.completed };
-    if (authUserId) {
-      const ok = await updateTaskInSupabase(updated);
-      if (!ok) return;
-      setTasks((prev) => prev.map((x) => (x.id === id ? updated : x)));
-      return;
-    }
-    setTasks((prev) => {
-      const next = prev.map((x) => (x.id === id ? updated : x));
-      persistTasksToLocalStorage(next);
-      return next;
-    });
-  };
-
-  const deleteTask = async (id: string) => {
-    if (authUserId) {
-      const ok = await deleteTaskFromSupabase(id);
-      if (!ok) return;
-      if (selectedTaskId === id) {
-        void persistSelectedTaskIdToSupabase(authUserId, null);
-        setSelectedTaskId(null);
-      }
-    } else {
-      setSelectedTaskId((prev) => (prev === id ? null : prev));
-    }
-    setTasks((prev) => {
-      const next = prev.filter((t) => t.id !== id);
-      if (!authUserId) persistTasksToLocalStorage(next);
-      return next;
-    });
-  };
-
   const saveNoise = () => {
     const payload = {
       selectedNoise,
@@ -1187,8 +1073,6 @@ export default function Home() {
 
   /** Stripe Customer Portal（解約・お支払い方法など） */
   const openStripeCustomerPortal = useCallback(async () => {
-    setPlanPortalError(null);
-    setPlanPortalLoading(true);
     try {
       const { data: authData } = await supabase.auth.getSession();
       const token = authData.session?.access_token;
@@ -1198,41 +1082,18 @@ export default function Home() {
       });
       const data = (await res.json()) as { url?: string; error?: string };
       if (!res.ok || !data.url) {
-        setPlanPortalError(data.error ?? "プラン管理を開けませんでした");
-        setPlanPortalLoading(false);
+        console.error("[stripe portal]", data.error ?? "プラン管理を開けませんでした");
         return;
       }
       window.location.assign(data.url);
     } catch {
-      setPlanPortalError("通信に失敗しました");
-      setPlanPortalLoading(false);
-    }
-  }, []);
-
-  /** Supabase セッション終了後にリロードし、localStorage ベースの状態に揃える */
-  const handleLogout = useCallback(async () => {
-    setLogoutLoading(true);
-    setIsAppMenuOpen(false);
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error("[auth] signOut:", error.message);
-        setLogoutLoading(false);
-        return;
-      }
-      clearPremiumLocalStorage();
-      window.location.reload();
-    } catch (e) {
-      console.error("[auth] signOut:", e);
-      setLogoutLoading(false);
+      console.error("[stripe portal] 通信に失敗しました");
     }
   }, []);
 
   const minutes = Math.floor(seconds / 60);
   const secs = seconds % 60;
   const selectedTask = selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) ?? null : null;
-  const unfinishedTasks = tasks.filter((t) => !t.completed);
-  const completedTasks = tasks.filter((t) => t.completed);
   const modeSeconds = getModeSeconds(mode, focusPreset);
   const elapsedRatio = seconds <= 0 ? 0 : 1 - Math.min(1, Math.max(0, seconds / modeSeconds));
 
@@ -1252,138 +1113,17 @@ export default function Home() {
   const mainButtonClass = isPaused
     ? "w-full px-5 py-3 rounded-full text-sm font-medium"
     : "w-full px-8 py-4 rounded-full text-base font-medium";
-  const contentGapClass = isPaused
-    ? "gap-3 sm:gap-4"
-    : "gap-4 sm:gap-5";
-  const footerClass = isPaused
-    ? "w-full max-w-lg grid grid-cols-3 items-center gap-x-1 sm:gap-x-2 pt-3 pb-[max(8px,env(safe-area-inset-bottom))] px-2 border-t border-white/10"
-    : "w-full max-w-lg grid grid-cols-3 items-center gap-x-1 sm:gap-x-2 pt-4 pb-[max(10px,env(safe-area-inset-bottom))] px-2 border-t border-white/10";
-  const fullscreenContentGapClass = isPaused
-    ? "gap-4 px-4"
-    : "gap-5 px-4";
+  const contentGapClass = isPaused ? "gap-6 sm:gap-8" : "gap-8 sm:gap-10";
 
-  const renderPresetSelector = (wrapperClassName: string) => (
-    <div className={wrapperClassName}>
-      <div className="mb-2 flex items-center justify-center gap-2 text-[11px] text-white/60">
-        <span>集中時間</span>
-        <span className="h-px w-8 bg-white/20" aria-hidden />
-        <span>{getPresetConfig(focusPreset).label}</span>
-      </div>
-      <div className="grid grid-cols-3 gap-2">
-        {FOCUS_PRESET_KEYS.map((presetKey) => {
-          const preset = getPresetConfig(presetKey);
-          const isActivePreset = focusPreset === presetKey;
-          const isDisabled = !isIdle;
-          return (
-            <button
-              key={presetKey}
-              type="button"
-              onClick={() => handleSelectFocusPreset(presetKey)}
-              disabled={isDisabled}
-              className={`
-                flex min-h-[72px] flex-col items-center justify-center rounded-2xl px-2 py-2 text-center transition
-                ${isActivePreset ? "bg-white/20 text-white ring-1 ring-white/30" : "bg-white/10 text-white/80 hover:bg-white/15"}
-                ${isDisabled ? "cursor-not-allowed opacity-55" : ""}
-              `}
-            >
-              <span className="text-[11px] font-medium leading-tight">{preset.label}</span>
-              <span className="mt-1 text-base font-semibold tabular-nums">
-                {Math.round(preset.focusSeconds / 60)}分
-              </span>
-              <span className="mt-0.5 text-[10px] text-white/55">
-                休憩 {Math.round(preset.shortBreakSeconds / 60)}分
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-
-  const renderTodaySummary = (wrapperClassName: string) => (
-    <div className={wrapperClassName}>
-      <div className="grid grid-cols-3 gap-2">
-        <div className="rounded-2xl bg-white/10 px-4 py-3 text-center backdrop-blur-sm border border-white/10">
-          <div className="text-[11px] text-white/60">今日の集中時間</div>
-          <div
-            className={`mt-1 font-semibold text-white tabular-nums transition-transform duration-300 ${
-              justCompletedWork ? "scale-[1.03]" : ""
-            }`}
-            style={{ fontSize: "clamp(18px,4.2vw,24px)" }}
-          >
-            {formatDurationLabel(stats.focusSeconds)}
-          </div>
-        </div>
-        <div
-          className={`rounded-2xl bg-white/10 px-4 py-3 text-center backdrop-blur-sm border border-white/10 transition-transform duration-500 ${
-            justCompletedWork ? "scale-[1.03] bg-white/20" : ""
-          } ${stats.completedPomos >= dailyGoalPomos ? "border-emerald-300/35 bg-emerald-300/5" : ""} ${
-            !justCompletedWork &&
-            stats.completedPomos < dailyGoalPomos &&
-            dailyGoalPomos - stats.completedPomos === 1
-              ? "scale-[1.02] border-amber-300/55 bg-amber-300/8"
-              : ""
-          }`}
-        >
-          <div className="text-[11px] text-white/60">完了ポモ数</div>
-          <div
-            className={`mt-1 font-semibold text-white tabular-nums ${
-              justCompletedWork ? "animate-pulse" : ""
-            }`}
-            style={{ fontSize: "clamp(18px,4.2vw,24px)" }}
-          >
-            {stats.completedPomos}
-          </div>
-          <div
-            className={`mt-1 text-[11px] tabular-nums ${
-              stats.completedPomos >= dailyGoalPomos
-                ? "text-emerald-200/90"
-                : dailyGoalPomos - stats.completedPomos === 1
-                  ? "text-amber-200/90"
-                  : "text-white/60"
-            }`}
-          >
-            {stats.completedPomos >= dailyGoalPomos
-              ? "今日の目標達成！"
-              : dailyGoalPomos - stats.completedPomos === 1
-                ? "あと1ポモで目標達成"
-                : `目標まであと${Math.max(0, dailyGoalPomos - stats.completedPomos)}ポモ`}
-          </div>
-        </div>
-        <div
-          className={`rounded-2xl bg-white/10 px-3 py-2 text-center backdrop-blur-sm transition-transform duration-500 ${
-            justCompletedWork ? "scale-[1.03] bg-white/20" : ""
-          }`}
-        >
-          <div className="text-[10px] text-white/55">連続記録</div>
-          <div className={`mt-1 text-sm font-semibold text-white tabular-nums ${justCompletedWork ? "animate-pulse" : ""}`}>
-            {streak.currentStreak}日
-          </div>
-        </div>
-      </div>
-
-      <div
-        className={`mt-2 rounded-2xl bg-white/10 px-3 py-3 text-center backdrop-blur-sm transition-transform duration-500 ${
-          stats.completedPomos >= dailyGoalPomos ? "ring-1 ring-emerald-300/25" : ""
-        }`}
-      >
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-left">
-            <div className="text-[10px] text-white/55">今日の目標</div>
-            <div className={`mt-1 text-sm font-semibold text-white tabular-nums ${justCompletedWork ? "animate-pulse" : ""}`}>
-              {stats.completedPomos} / {dailyGoalPomos}
-            </div>
-          </div>
-          <div className="text-right">
-            <div className="text-[10px] text-white/55">目標値</div>
-            <div className={`mt-1 text-sm font-semibold text-white/90 tabular-nums ${stats.completedPomos >= dailyGoalPomos ? "text-emerald-200/90" : ""}`}>
-              {dailyGoalPomos}ポモ
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  settingsQueryHandlersRef.current = {
+    openTheme: () => setIsThemeModalOpen(true),
+    openNoise: () => {
+      setIsPremiumNoiseUpsellOpen(false);
+      setIsNoiseModalOpen(true);
+    },
+    openPremium: () => setIsPremiumNoiseUpsellOpen(true),
+    openBilling: () => void openStripeCustomerPortal(),
+  };
 
   const themeModal = (
     <div
@@ -1486,13 +1226,10 @@ export default function Home() {
     </div>
   );
 
-  // フリップ用 4 桁: [m1, m2, s1, s2]
-  const d1 = String(Math.floor(minutes / 10));
-  const d2 = String(minutes % 10);
-  const d3 = String(Math.floor(secs / 10));
-  const d4 = String(secs % 10);
+  const chromeButtonClass =
+    "flex items-center justify-center w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white/90 text-xl font-light leading-none hover:bg-white/20 hover:text-white transition";
 
-  // 通常表示
+  // 通常表示（タイマー中心・統計・タスク編集はメニュー先）
   const normalView = (
     <div
       className="relative min-h-dvh flex flex-col bg-cover bg-center bg-no-repeat"
@@ -1505,53 +1242,25 @@ export default function Home() {
         style={{ background: noiseTheme.overlay }}
         aria-hidden
       />
-      <div className="relative flex flex-1 flex-col items-center justify-between px-4 pt-6 pb-[max(14px,env(safe-area-inset-bottom))] text-white sm:pt-8 sm:pb-[max(18px,env(safe-area-inset-bottom))]">
-        {/* ヘッダー（streak → タスク名 → タイマー円） */}
-        <div className="w-full max-w-md text-center pt-1 flex flex-col items-center gap-2">
-          {/* streak: 補助情報として最上段 */}
-          <div
-            className={`inline-flex items-center gap-2 text-[10px] font-semibold bg-white/5 border px-3 py-1 rounded-full backdrop-blur-sm ${
-              streak.achievedToday
-                ? "text-emerald-200/95 border-emerald-300/25"
-                : "text-white/70 border-white/10"
-            }`}
-          >
-            <span aria-hidden className="text-white/60">
-              ↻
-            </span>
-            <span>{`連続${streak.currentStreak}日`}</span>
-          </div>
-
-          {/* タスク名: 主役として中央寄せ */}
+      {!isFullscreenMode && (
+        <div className="fixed z-[59] top-[max(12px,env(safe-area-inset-top))] right-[max(12px,env(safe-area-inset-right))]">
           <button
             type="button"
-            onClick={() => setTaskDrawerOpen(true)}
-            className="text-white/90 text-sm font-medium underline decoration-white/50 underline-offset-2 hover:text-white"
+            onClick={enterFullscreen}
+            className={chromeButtonClass}
+            aria-label="全画面"
           >
-            {authUserId && tasksRemoteLoading
-              ? "タスクを読み込み中…"
-              : selectedTask
-                ? selectedTask.title
-                : "タスクを選んでください…"}
+            <span aria-hidden>⛶</span>
           </button>
-
-          {/* プレミアム: タスク名の直下には置かず、補助情報ブロックの一部としてまとめて表示 */}
-          {isPremiumUnlocked && (
-            <div className="inline-flex items-center gap-2 text-[11px] font-semibold text-emerald-100 bg-emerald-400/10 border border-emerald-400/25 px-3 py-1 rounded-full backdrop-blur-sm">
-              <span aria-hidden>✓</span>
-              <span>プレミアム利用中</span>
-            </div>
-          )}
         </div>
-
-        {/* 中央: タイマー + リング */}
-        <div className={`flex flex-col items-center ${contentGapClass}`}>
+      )}
+      <div className="relative flex flex-1 flex-col items-center justify-center px-6 pt-16 pb-[max(24px,env(safe-area-inset-bottom))] text-white min-h-0">
+        <div className={`flex w-full max-w-md flex-col items-center ${contentGapClass}`}>
           <div
-            className={`relative flex items-center justify-center w-56 h-56 sm:w-64 sm:h-64 rounded-full border-2 border-white/25 transition
-              ${justCompletedWork ? "border-white/70 shadow-xl animate-pulse" : ""}`}
-            style={{
-              background: "transparent",
-            }}
+            className={`relative flex aspect-square w-[min(17rem,72vw)] max-h-[38vh] items-center justify-center rounded-full border-2 border-white/25 transition sm:w-72 sm:max-h-[42vh] ${
+              justCompletedWork ? "border-white/70 shadow-xl animate-pulse" : ""
+            }`}
+            style={{ background: "transparent" }}
           >
             {justCompletedWork && (
               <div
@@ -1575,110 +1284,101 @@ export default function Home() {
                 background: `conic-gradient(from 0deg, rgba(255,255,255,0.5) 0deg, rgba(255,255,255,0.5) ${elapsedRatio * 360}deg, transparent ${elapsedRatio * 360}deg)`,
               }}
             />
-            <div className="relative z-10 text-center">
-              <span className="text-5xl sm:text-6xl font-light tabular-nums tracking-wider">
+            <div className="relative z-10 text-center px-2">
+              <span className="text-[clamp(2.75rem,11vw,4.5rem)] font-extralight tabular-nums tracking-[0.08em] text-white/95">
                 {String(minutes).padStart(2, "0")}:{String(secs).padStart(2, "0")}
               </span>
-              <p className="mt-1 text-xs text-white/70">{getModeLabel(mode)}</p>
+              <p className="mt-2 text-[11px] tracking-wide text-white/50">{getModeLabel(mode)}</p>
             </div>
           </div>
 
-          {/* 作業セッション完了メッセージ */}
           {justCompletedWork && (
-            <div className="mt-0.5 text-xs text-emerald-50/90 bg-white/10 px-3 py-1 rounded-full backdrop-blur-sm transition-opacity duration-500 animate-pulse">
-              <div className="text-[12px] font-semibold text-white/95 leading-tight">集中、完了！</div>
-              <div className="mt-0.5 text-[11px] text-white/70 tabular-nums">
-                今日 {stats.completedPomos}ポモ目
-              </div>
-              {nextActionHint && (
-                <div className="mt-0.5 text-[11px] text-white/75">{nextActionHint}</div>
-              )}
+            <div className="max-w-sm rounded-full bg-white/10 px-4 py-2 text-center backdrop-blur-sm transition-opacity duration-500 animate-pulse">
+              <div className="text-xs font-medium text-white/95">集中、完了！</div>
+              {nextActionHint ? (
+                <div className="mt-1 text-[11px] text-white/60">{nextActionHint}</div>
+              ) : null}
             </div>
           )}
 
           {justCompletedBreak && (
-            <div className="mt-0.5 text-xs text-white/75 bg-white/10 px-3 py-1 rounded-full backdrop-blur-sm transition-opacity duration-500">
+            <div className="max-w-sm rounded-full bg-white/10 px-4 py-2 text-center text-xs text-white/70 backdrop-blur-sm">
               {nextActionHint || "作業に戻ります"}
             </div>
           )}
 
-          {renderPresetSelector(
-            `w-full max-w-sm ${isIdle ? "opacity-100" : "opacity-70"}`
-          )}
+          <div
+            className={`flex w-full max-w-sm justify-center gap-3 ${isIdle ? "opacity-100" : "pointer-events-none opacity-45"}`}
+            role="group"
+            aria-label="集中時間"
+          >
+            {FOCUS_PRESET_KEYS.map((presetKey) => {
+              const preset = getPresetConfig(presetKey);
+              const active = focusPreset === presetKey;
+              return (
+                <button
+                  key={presetKey}
+                  type="button"
+                  disabled={!isIdle}
+                  onClick={() => handleSelectFocusPreset(presetKey)}
+                  className={`min-w-0 flex-1 rounded-2xl py-3.5 text-sm font-medium tabular-nums transition ${
+                    active ? "bg-white/22 text-white ring-1 ring-white/35" : "bg-white/10 text-white/80 hover:bg-white/16"
+                  }`}
+                >
+                  {Math.round(preset.focusSeconds / 60)}分
+                </button>
+              );
+            })}
+          </div>
 
-          {/* メイン操作ボタン（状態別） */}
           <div className={mainButtonWrapClass}>
             {isPaused ? (
               <>
-              <button
-                type="button"
-                onClick={handleResume}
-                className={mainButtonClass + " bg-white/90 text-gray-900 hover:bg-white"}
-              >
-                続ける
-              </button>
-              <button
-                type="button"
-                onClick={handleRequestStop}
-                className={mainButtonClass + " border border-white/40 text-white/90 bg-white/5 hover:bg-white/10"}
-              >
-                停止する
-              </button>
+                <button
+                  type="button"
+                  onClick={handleResume}
+                  className={mainButtonClass + " bg-white/90 text-gray-900 hover:bg-white"}
+                >
+                  続ける
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRequestStop}
+                  className={
+                    mainButtonClass +
+                    " border border-white/40 text-white/90 bg-white/5 hover:bg-white/10"
+                  }
+                >
+                  停止する
+                </button>
               </>
             ) : (
               <button
                 type="button"
                 onClick={handleMainButton}
-                className={`
-                  ${mainButtonClass}
-                  transition opacity
-                  bg-white/90 text-gray-900 hover:bg-white
-                `}
+                className={`${mainButtonClass} bg-white/90 text-gray-900 transition hover:bg-white`}
               >
                 {mainButtonLabel}
               </button>
             )}
           </div>
 
-          {renderTodaySummary("w-full max-w-sm")}
+          <Link
+            href="/tasks"
+            className="mt-1 w-full max-w-sm text-center text-[11px] leading-snug text-white/40 underline decoration-white/15 underline-offset-[5px] transition hover:text-white/65 hover:decoration-white/30"
+          >
+            {authUserId && tasksRemoteLoading ? (
+              "タスクを読み込み中…"
+            ) : selectedTask ? (
+              <>
+                <span className="block text-white/38">現在のタスク</span>
+                <span className="mt-0.5 block truncate px-1 text-white/55">{selectedTask.title}</span>
+              </>
+            ) : (
+              "タスクを選択"
+            )}
+          </Link>
         </div>
-
-        {/* フッター */}
-        <footer className={footerClass}>
-          <div className="flex min-w-0 justify-start items-center">
-            <button
-              type="button"
-              onClick={() => setIsThemeModalOpen(true)}
-              className="flex flex-col items-center gap-1 px-2 sm:px-3 py-2 rounded-xl text-white/75 text-xs hover:text-white/95 hover:bg-white/5"
-            >
-              <span className="text-lg">◼︎</span>
-              <span className="text-center leading-tight">テーマ</span>
-            </button>
-          </div>
-          <div className="flex min-w-0 justify-center items-center">
-            <button
-              type="button"
-              onClick={enterFullscreen}
-              className="flex flex-col items-center gap-1 px-2 sm:px-3 py-2 rounded-xl text-white/75 text-xs hover:text-white/95 hover:bg-white/5"
-            >
-              <span className="text-lg">⛶</span>
-              <span>全画面</span>
-            </button>
-          </div>
-          <div className="flex min-w-0 justify-end items-center">
-            <button
-              type="button"
-              onClick={() => {
-              setIsPremiumNoiseUpsellOpen(false);
-              setIsNoiseModalOpen(true);
-            }}
-              className="flex flex-col items-center gap-1 px-2 sm:px-3 py-2 rounded-xl text-white/75 text-xs hover:text-white/95 hover:bg-white/5"
-            >
-              <span className="text-lg">♪</span>
-              <span className="text-center leading-tight">ホワイトノイズ</span>
-            </button>
-          </div>
-        </footer>
       </div>
     </div>
   );
@@ -2019,141 +1719,6 @@ export default function Home() {
     </div>
   );
 
-  // タスク（メニュー「タスク」またはヘッダーのタスク名から開く）
-  const [taskDrawerOpen, setTaskDrawerOpen] = useState(false);
-  const taskSelector = (
-    <div
-      className="fixed inset-0 z-[55] flex items-end sm:items-center justify-center bg-black/50"
-      style={{ display: taskDrawerOpen ? "flex" : "none" }}
-      onClick={() => setTaskDrawerOpen(false)}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="task-drawer-title"
-    >
-      <div
-        className="w-full max-w-md max-h-[80vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-gray-900 text-white p-6 border border-white/10 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex justify-between items-start gap-2 mb-1">
-          <div>
-            <h2 id="task-drawer-title" className="text-lg font-semibold">
-              タスク
-            </h2>
-            <p className="text-xs text-white/50 mt-0.5">選んだタスクがタイマーの対象になります。作業セッション完了で実績ポモが +1 されます。</p>
-          </div>
-          <button type="button" onClick={() => setTaskDrawerOpen(false)} className="p-2 text-white/70 hover:text-white shrink-0">
-            ×
-          </button>
-        </div>
-        <div className="flex gap-2 mb-4 mt-4">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && void addTask()}
-            placeholder="タイトルを入力"
-            disabled={Boolean(authUserId && tasksRemoteLoading)}
-            className="flex-1 px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/40 text-sm disabled:opacity-50"
-          />
-          <button
-            type="button"
-            onClick={() => void addTask()}
-            disabled={Boolean(authUserId && tasksRemoteLoading)}
-            className="px-4 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white text-sm font-medium shrink-0 disabled:opacity-50"
-          >
-            追加
-          </button>
-        </div>
-        <ul className="space-y-2">
-          {authUserId && tasksRemoteLoading ? (
-            <li className="px-2 py-10 text-center text-sm text-white/50">タスクを読み込み中…</li>
-          ) : (
-            <>
-              {unfinishedTasks.length === 0 && (
-                <li className="px-2 py-6 text-center text-sm text-white/45">
-                  タスクがありません。上の欄から追加してください。
-                </li>
-              )}
-              {unfinishedTasks.map((task) => (
-                <li key={task.id}>
-                  <div
-                    className={`flex items-center gap-2 px-3 py-2.5 rounded-xl ${
-                      selectedTaskId === task.id ? "bg-white/15 ring-1 ring-white/30" : "bg-white/5 hover:bg-white/10"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={task.completed}
-                      onChange={() => void toggleTask(task.id)}
-                      aria-label={`「${task.title}」を完了にする`}
-                      className="rounded border-white/30 shrink-0"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedTaskId(task.id);
-                        setTaskDrawerOpen(false);
-                      }}
-                      className="min-w-0 flex-1 flex items-center justify-between gap-2 text-left text-sm"
-                    >
-                      <span className="truncate text-white/90">{task.title}</span>
-                      <span className="shrink-0 tabular-nums text-xs text-white/45">{task.actualPomodoros} ポモ</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void deleteTask(task.id)}
-                      className="shrink-0 text-white/45 hover:text-red-400 text-xs px-2 py-1 rounded-md hover:bg-white/10"
-                    >
-                      削除
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </>
-          )}
-        </ul>
-        {!tasksRemoteLoading && completedTasks.length > 0 && (
-          <div className="mt-4">
-            <button
-              type="button"
-              onClick={() => setShowCompletedTasks(!showCompletedTasks)}
-              className="text-sm text-white/60 hover:text-white/80"
-            >
-              {showCompletedTasks ? "▼" : "▶"} 完了済み ({completedTasks.length})
-            </button>
-            {showCompletedTasks && (
-              <ul className="mt-2 space-y-1">
-                {completedTasks.map((task) => (
-                  <li
-                    key={task.id}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-white/50 text-sm bg-white/[0.03]"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={task.completed}
-                      onChange={() => void toggleTask(task.id)}
-                      aria-label={`「${task.title}」を未完了に戻す`}
-                      className="rounded border-white/30 shrink-0"
-                    />
-                    <span className="flex-1 min-w-0 truncate line-through">{task.title}</span>
-                    <span className="shrink-0 tabular-nums text-xs text-white/40">{task.actualPomodoros} ポモ</span>
-                    <button
-                      type="button"
-                      onClick={() => void deleteTask(task.id)}
-                      className="text-red-400/80 text-xs px-2 py-1 rounded-md hover:bg-white/10 shrink-0"
-                    >
-                      削除
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
   // 停止確認モーダル
   const stopConfirmModal = (
     <div
@@ -2191,17 +1756,18 @@ export default function Home() {
     </div>
   );
 
-  const menuButtonClass =
-    "flex items-center justify-center w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white/90 text-xl font-light leading-none hover:bg-white/20 hover:text-white transition";
-
   return (
     <main className="relative min-h-dvh">
+      <Suspense fallback={null}>
+        <HomeSettingsFromQuery handlersRef={settingsQueryHandlersRef} />
+      </Suspense>
+
       {/* 左上: ハンバーガー（ビューポート固定・全画面時は閉じるボタンを隣に並べる） */}
       <div className="fixed z-[59] top-[max(12px,env(safe-area-inset-top))] left-[max(12px,env(safe-area-inset-left))] flex items-center gap-2">
         <button
           type="button"
           onClick={() => setIsAppMenuOpen(true)}
-          className={menuButtonClass}
+          className={chromeButtonClass}
           aria-label="メニューを開く"
           aria-expanded={isAppMenuOpen}
         >
@@ -2214,7 +1780,7 @@ export default function Home() {
               e.stopPropagation();
               exitFullscreen();
             }}
-            className={`${menuButtonClass} font-normal text-xl leading-none`}
+            className={`${chromeButtonClass} font-normal text-xl leading-none`}
             aria-label="全画面を閉じる"
           >
             ×
@@ -2222,37 +1788,16 @@ export default function Home() {
         )}
       </div>
 
-      {/* 通常表示: 背景 + タイマー + フッター */}
       <div className={isFullscreenMode ? "invisible" : ""}>{normalView}</div>
 
-      {/* 全画面モード UI */}
       {fullscreenUI}
 
-      {/* モーダル類 */}
       {noiseModal}
       {premiumNoiseUpsellModal}
       {themeModal}
       {stopConfirmModal}
-      {taskSelector}
 
-      <AppMenuDrawer
-        open={isAppMenuOpen}
-        onClose={() => {
-          setIsAppMenuOpen(false);
-          setPlanPortalError(null);
-        }}
-        onOpenTasks={() => setTaskDrawerOpen(true)}
-        onOpenSettings={() => setIsThemeModalOpen(true)}
-        onOpenPremium={() => setIsPremiumNoiseUpsellOpen(true)}
-        showPlanManagement={isPremiumUnlocked}
-        onOpenPlanManagement={() => void openStripeCustomerPortal()}
-        planManagementLoading={planPortalLoading}
-        planManagementError={planPortalError}
-        showLogout={Boolean(authUserId)}
-        onLogout={() => void handleLogout()}
-        logoutLoading={logoutLoading}
-        showLogin={!authUserId}
-      />
+      <AppMenuDrawer open={isAppMenuOpen} onClose={() => setIsAppMenuOpen(false)} />
     </main>
   );
 }
