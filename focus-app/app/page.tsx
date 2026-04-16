@@ -475,17 +475,20 @@ function loadBackgroundTheme(): BackgroundThemeKey {
   return DEFAULT_BACKGROUND_THEME;
 }
 
-/** 12時起点・時計回りの円周進捗（中央はクリア） */
+/** 12時起点・時計回りの円周進捗（中央はクリア）。リングは viewBox 外周付近に1本で見えるよう配置 */
 function TimerProgressRing({
   elapsedRatio,
   className,
-  strokeWidth = 3.25,
+  strokeWidth = 3.5,
+  radius = 47,
 }: {
   elapsedRatio: number;
   className?: string;
   strokeWidth?: number;
+  /** viewBox 0..100 上の半径（50 に近いほど外周） */
+  radius?: number;
 }) {
-  const r = 44;
+  const r = radius;
   const circumference = 2 * Math.PI * r;
   const p = Math.min(1, Math.max(0, elapsedRatio));
   const dashOffset = circumference * (1 - p);
@@ -1579,8 +1582,8 @@ export default function Home() {
         <div className="relative mx-auto flex min-h-0 w-full max-w-sm flex-1 flex-col items-center justify-center gap-4 py-2 sm:max-w-md sm:gap-5 sm:py-4 max-sm:translate-y-1">
           <div className="flex w-full flex-col items-center gap-2">
             <div
-              className={`relative flex aspect-square w-[min(17rem,72vw)] max-h-[min(36vh,300px)] items-center justify-center rounded-full border-2 border-white/25 transition sm:w-72 sm:max-h-[min(40vh,340px)] ${
-                justCompletedWork ? "border-white/70 shadow-xl animate-pulse" : ""
+              className={`relative flex aspect-square w-[min(17rem,72vw)] max-h-[min(36vh,300px)] items-center justify-center rounded-full transition sm:w-72 sm:max-h-[min(40vh,340px)] ${
+                justCompletedWork ? "shadow-xl shadow-emerald-500/15 ring-2 ring-emerald-300/35 animate-pulse" : ""
               }`}
               style={{ background: "transparent" }}
               aria-label={`${getModeLabel(mode)} ${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`}
@@ -1603,11 +1606,12 @@ export default function Home() {
               )}
               <TimerProgressRing
                 elapsedRatio={elapsedRatio}
-                strokeWidth={3.25}
-                className="pointer-events-none absolute inset-0 h-full w-full p-[5px]"
+                strokeWidth={3.5}
+                radius={47}
+                className="pointer-events-none absolute inset-0 h-full w-full"
               />
-              <div className="relative z-10 flex items-center justify-center px-2 text-center">
-                <span className="text-[clamp(2.75rem,11vw,4.5rem)] font-extralight tabular-nums tracking-[0.08em] text-white/95">
+              <div className="relative z-10 flex max-w-[72%] items-center justify-center px-5 py-4 text-center sm:max-w-[68%] sm:px-6 sm:py-5">
+                <span className="text-[clamp(2.35rem,9.25vw,3.85rem)] font-extralight tabular-nums tracking-[0.08em] text-white/95 sm:text-[clamp(2.4rem,8.5vw,3.75rem)]">
                   {String(minutes).padStart(2, "0")}:{String(secs).padStart(2, "0")}
                 </span>
               </div>
@@ -1712,7 +1716,7 @@ export default function Home() {
       {/* 余計なUIを消し、タイマーだけ中央に大きく */}
       <div className="relative flex-1 flex items-center justify-center p-4">
         <div
-          className="relative flex items-center justify-center rounded-full border-2 border-white/25"
+          className="relative flex items-center justify-center rounded-full"
           style={{
             width: "clamp(280px, 80vw, 520px)",
             height: "clamp(280px, 80vw, 520px)",
@@ -1720,11 +1724,12 @@ export default function Home() {
         >
           <TimerProgressRing
             elapsedRatio={elapsedRatio}
-            strokeWidth={3.75}
-            className="pointer-events-none absolute inset-0 h-full w-full p-[6px]"
+            strokeWidth={4}
+            radius={47}
+            className="pointer-events-none absolute inset-0 h-full w-full"
           />
-          <div className="relative z-10 text-center">
-            <div className="text-[clamp(3.5rem,12vw,6rem)] font-light tabular-nums tracking-wider">
+          <div className="relative z-10 flex max-w-[70%] items-center justify-center px-6 py-6 text-center sm:px-8 sm:py-8">
+            <div className="text-[clamp(3rem,10.5vw,5.25rem)] font-light tabular-nums tracking-[0.06em] text-white/95">
               {String(minutes).padStart(2, "0")}:{String(secs).padStart(2, "0")}
             </div>
           </div>
