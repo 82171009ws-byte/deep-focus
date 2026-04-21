@@ -1,16 +1,7 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import Stripe from "stripe";
 import { getOrigin, getSupabaseUserIdFromRequest } from "@/lib/apiServerHelpers";
-
-function createSupabaseAdmin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return null;
-  return createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
+import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
 
 /**
  * Stripe Customer Portal セッションを作成（解約・支払い方法など）。
@@ -34,7 +25,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const admin = createSupabaseAdmin();
+    const admin = createSupabaseAdminClient();
     if (!admin) {
       return NextResponse.json(
         { error: "サーバー設定が不足しています（Supabase）" },

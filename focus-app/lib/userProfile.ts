@@ -9,6 +9,9 @@ export type UserProfileRow = {
   id: string;
   is_premium: boolean;
   stripe_customer_id: string | null;
+  stripe_subscription_id?: string | null;
+  subscription_status?: string | null;
+  price_id?: string | null;
   selected_noise?: string;
   selected_noise2?: string;
   noise_volume?: number;
@@ -18,7 +21,6 @@ export type UserProfileRow = {
 export type UserNoisePrefs = {
   selectedNoise: string;
   selectedNoise2: string;
-  noiseVolume: number;
 };
 
 /** 端末に残った旧フラグを削除（ログアウト時など）。premium の source of truth は DB のみ。 */
@@ -46,39 +48,22 @@ export async function fetchUserPremium(userId: string): Promise<boolean> {
   return data?.is_premium ?? false;
 }
 
-/** ログイン中のフラグ更新（Checkout 成功ページ・解除ボタン等）。 */
-export async function upsertUserPremium(userId: string, isPremium: boolean): Promise<boolean> {
-  const { error } = await supabase.from(TABLE).upsert(
-    { id: userId, is_premium: isPremium },
-    { onConflict: "id" }
-  );
-  if (error) {
-    console.warn("[userProfile] upsertUserPremium:", error.message);
-    return false;
-  }
-  return true;
-}
-
 /** ログイン中: Supabase のノイズ設定。未設定時はデフォルト。 */
 export async function fetchUserNoisePrefs(userId: string): Promise<UserNoisePrefs> {
   const { data, error } = await supabase
     .from(TABLE)
-    .select("selected_noise, selected_noise2, noise_volume")
+    .select("selected_noise, selected_noise2")
     .eq("id", userId)
     .maybeSingle();
 
   if (error) {
     console.warn("[userProfile] fetchUserNoisePrefs:", error.message);
-    return { selectedNoise: "none", selectedNoise2: "none", noiseVolume: 70 };
+    return { selectedNoise: "none", selectedNoise2: "none" };
   }
 
   return {
     selectedNoise: (data?.selected_noise as string | undefined) ?? "none",
     selectedNoise2: (data?.selected_noise2 as string | undefined) ?? "none",
-    noiseVolume:
-      typeof data?.noise_volume === "number" && data.noise_volume >= 0 && data.noise_volume <= 100
-        ? data.noise_volume
-        : 70,
   };
 }
 
@@ -89,7 +74,6 @@ export async function upsertUserNoisePrefs(userId: string, prefs: UserNoisePrefs
       id: userId,
       selected_noise: prefs.selectedNoise,
       selected_noise2: prefs.selectedNoise2,
-      noise_volume: prefs.noiseVolume,
     },
     { onConflict: "id" }
   );

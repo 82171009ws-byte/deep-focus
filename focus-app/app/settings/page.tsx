@@ -1,17 +1,18 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { clearPremiumLocalStorage, fetchUserPremium } from "@/lib/userProfile";
+import { fetchUserPremium } from "@/lib/userProfile";
 
 const rowClass =
   "flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3.5 text-left text-sm text-white/90 transition hover:bg-white/[0.09]";
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [isPremium, setIsPremium] = useState(false);
-  const [logoutLoading, setLogoutLoading] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
   const [portalError, setPortalError] = useState<string | null>(null);
 
@@ -42,6 +43,10 @@ export default function SettingsPage() {
   }, []);
 
   const openStripeCustomerPortal = useCallback(async () => {
+    if (!authUserId) {
+      router.push("/login");
+      return;
+    }
     setPortalError(null);
     setPortalLoading(true);
     try {
@@ -62,24 +67,7 @@ export default function SettingsPage() {
       setPortalError("通信に失敗しました");
       setPortalLoading(false);
     }
-  }, []);
-
-  const handleLogout = useCallback(async () => {
-    setLogoutLoading(true);
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error("[auth] signOut:", error.message);
-        setLogoutLoading(false);
-        return;
-      }
-      clearPremiumLocalStorage();
-      window.location.href = "/";
-    } catch (e) {
-      console.error("[auth] signOut:", e);
-      setLogoutLoading(false);
-    }
-  }, []);
+  }, [authUserId, router]);
 
   return (
     <main className="min-h-dvh bg-[#0b0f14] text-white px-4 py-8 pb-[max(24px,env(safe-area-inset-bottom))]">
@@ -128,26 +116,6 @@ export default function SettingsPage() {
             </p>
           )}
         </nav>
-
-        <div className="mt-14 border-t border-white/10 pt-8 space-y-3">
-          {authUserId ? (
-            <button
-              type="button"
-              onClick={() => void handleLogout()}
-              disabled={logoutLoading}
-              className="w-full rounded-xl border border-white/15 py-3 text-sm text-white/75 hover:bg-white/[0.06] disabled:opacity-50"
-            >
-              {logoutLoading ? "ログアウト中…" : "ログアウト"}
-            </button>
-          ) : (
-            <Link
-              href="/login"
-              className="flex w-full items-center justify-center rounded-xl bg-white/15 py-3 text-sm font-medium text-white hover:bg-white/20"
-            >
-              ログイン
-            </Link>
-          )}
-        </div>
       </div>
     </main>
   );

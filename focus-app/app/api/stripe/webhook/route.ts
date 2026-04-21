@@ -3,7 +3,7 @@ import Stripe from "stripe";
 import {
   handleCheckoutSessionCompleted,
   handleCustomerSubscriptionDeleted,
-  handleInvoicePaymentFailed,
+  handleCustomerSubscriptionUpdated,
 } from "@/lib/stripeWebhookHandlers";
 
 export const runtime = "nodejs";
@@ -17,7 +17,7 @@ export function GET() {
 }
 
 /**
- * Stripe Webhook。checkout.session.completed でプレミアムを確定する（正の情報源）。
+ * Stripe Webhook。プレミアム反映はここだけを正とする（success ページでは更新しない）。
  * 署名検証: STRIPE_WEBHOOK_SECRET
  * DB 更新: SUPABASE_SERVICE_ROLE_KEY（サーバーのみ）
  */
@@ -48,13 +48,13 @@ export async function POST(req: Request) {
   try {
     switch (event.type) {
       case "checkout.session.completed":
-        await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
+        await handleCheckoutSessionCompleted(stripe, event.data.object as Stripe.Checkout.Session);
+        break;
+      case "customer.subscription.updated":
+        await handleCustomerSubscriptionUpdated(event.data.object as Stripe.Subscription);
         break;
       case "customer.subscription.deleted":
         await handleCustomerSubscriptionDeleted(event.data.object as Stripe.Subscription);
-        break;
-      case "invoice.payment_failed":
-        await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
         break;
       default:
         break;

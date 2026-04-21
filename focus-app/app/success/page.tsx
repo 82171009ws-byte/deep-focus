@@ -7,11 +7,9 @@ export default function CheckoutSuccessPage() {
     <main className="min-h-dvh flex flex-col items-center justify-center gap-4 px-4 bg-[#0b0f14] text-white">
       <h1 className="text-xl font-semibold text-center">お支払いありがとうございます</h1>
       <p className="text-white/70 text-sm text-center max-w-md leading-relaxed">
-        決済の反映を確認しています。数秒〜数分でプレミアムが有効になる場合があります。
+        決済の反映は Stripe の通知を受けてサーバー側で処理されます。数秒〜数分でプレミアムが有効になる場合があります。
         <br />
-        反映後はトップ画面を開き直すか、再ログインすると状態が更新されます。
-        <br />
-        テストモードでは実際の課金は発生しません。
+        反映後はホームを開き直すか、再読み込みすると状態が更新されます。
       </p>
       <Link
         href="/"

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import {
@@ -418,12 +419,11 @@ function loadSelectedTaskId(): string | null {
 function loadNoise(): {
   selectedNoise: string;
   selectedNoise2: string;
-  noiseVolume: number;
 } {
-  if (typeof window === "undefined") return { selectedNoise: "none", selectedNoise2: "none", noiseVolume: 70 };
+  if (typeof window === "undefined") return { selectedNoise: "none", selectedNoise2: "none" };
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.noise);
-    if (!raw) return { selectedNoise: "none", selectedNoise2: "none", noiseVolume: 70 };
+    if (!raw) return { selectedNoise: "none", selectedNoise2: "none" };
     const p = JSON.parse(raw) as { selectedNoise?: string; selectedNoise2?: string; noiseVolume?: number };
     const rawValue = typeof p?.selectedNoise === "string" ? p.selectedNoise : "none";
     const rawValue2 = typeof p?.selectedNoise2 === "string" ? p.selectedNoise2 : "none";
@@ -442,10 +442,9 @@ function loadNoise(): {
     };
     const candidate = normalizeNoiseId(legacyMap[rawValue] ?? rawValue);
     const candidate2 = normalizeNoiseId(legacyMap[rawValue2] ?? rawValue2);
-    const vol = typeof p?.noiseVolume === "number" && p.noiseVolume >= 0 && p.noiseVolume <= 100 ? p.noiseVolume : 70;
-    return { selectedNoise: candidate, selectedNoise2: candidate2 === candidate ? "none" : candidate2, noiseVolume: vol };
+    return { selectedNoise: candidate, selectedNoise2: candidate2 === candidate ? "none" : candidate2 };
   } catch {
-    return { selectedNoise: "none", selectedNoise2: "none", noiseVolume: 70 };
+    return { selectedNoise: "none", selectedNoise2: "none" };
   }
 }
 
@@ -528,6 +527,7 @@ function TimerProgressRing({
 // -----------------------------------------------------------------------------
 
 export default function Home() {
+  const router = useRouter();
   const [timerStatus, setTimerStatus] = useState<TimerStatus>("idle");
   const [isNoiseModalOpen, setIsNoiseModalOpen] = useState(false);
   const [isPremiumNoiseUpsellOpen, setIsPremiumNoiseUpsellOpen] = useState(false);
@@ -540,7 +540,6 @@ export default function Home() {
   const [isAppMenuOpen, setIsAppMenuOpen] = useState(false);
   const [selectedNoise, setSelectedNoise] = useState(() => loadNoise().selectedNoise);
   const [selectedNoise2, setSelectedNoise2] = useState(() => loadNoise().selectedNoise2);
-  const [noiseVolume, setNoiseVolume] = useState(() => loadNoise().noiseVolume);
   const [justCompletedWork, setJustCompletedWork] = useState(false);
   const [justCompletedBreak, setJustCompletedBreak] = useState(false);
   const [nextActionHint, setNextActionHint] = useState<string>("");
@@ -569,19 +568,13 @@ export default function Home() {
           if (!mounted) return;
           const s1 = normalizeNoiseId(prefs.selectedNoise);
           const s2 = normalizeNoiseId(prefs.selectedNoise2);
-          const vol =
-            typeof prefs.noiseVolume === "number" && prefs.noiseVolume >= 0 && prefs.noiseVolume <= 100
-              ? prefs.noiseVolume
-              : 70;
           setSelectedNoise(s1);
           setSelectedNoise2(s2 === s1 ? "none" : s2);
-          setNoiseVolume(vol);
         });
       } else {
-        const { selectedNoise: s, selectedNoise2: s2, noiseVolume: v } = loadNoise();
+        const { selectedNoise: s, selectedNoise2: s2 } = loadNoise();
         setSelectedNoise(s);
         setSelectedNoise2(s2);
-        setNoiseVolume(v);
       }
     };
 
@@ -656,10 +649,9 @@ export default function Home() {
         if (!mounted) return;
         setAuthUserId(null);
         setIsPremiumUser(false);
-        const { selectedNoise: s, selectedNoise2: s2, noiseVolume: v } = loadNoise();
+        const { selectedNoise: s, selectedNoise2: s2 } = loadNoise();
         setSelectedNoise(s);
         setSelectedNoise2(s2);
-        setNoiseVolume(v);
         prevRemoteTaskUserIdRef.current = null;
         tasksRemoteHydratedRef.current = true;
         setTasksRemoteLoading(false);
@@ -953,7 +945,9 @@ export default function Home() {
     if (!noiseFilesKeyInfo.files.length) return;
 
     try {
-      const perVolume = (noiseVolume / 100) / noiseFilesKeyInfo.files.length;
+      const n = noiseFilesKeyInfo.files.length;
+      const baseVolume = 0.8;
+      const perVolume = Math.min(1, baseVolume / Math.sqrt(n));
       audioRefs.current = noiseFilesKeyInfo.files.map((path) => {
         const audio = new Audio(path);
         audio.loop = true;
@@ -973,7 +967,7 @@ export default function Home() {
     } catch {
       audioRefs.current = [];
     }
-  }, [noiseFilesKeyInfo.key, noiseFilesKeyInfo.files.length, noiseVolume, running, mode, isPremiumUnlocked]);
+  }, [noiseFilesKeyInfo.key, noiseFilesKeyInfo.files.length, running, mode, isPremiumUnlocked]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1116,7 +1110,6 @@ export default function Home() {
     const payload = {
       selectedNoise,
       selectedNoise2: isPremiumUnlocked ? selectedNoise2 : "none",
-      noiseVolume,
     };
 
     if (authUserId) {
@@ -1140,7 +1133,7 @@ export default function Home() {
       });
       if (!path) return;
       const a = new Audio(path);
-      a.volume = noiseVolume / 100;
+      a.volume = 1;
       a.loop = false;
       void a.play();
       setTimeout(() => a.pause(), 2000);
@@ -1151,7 +1144,7 @@ export default function Home() {
     try {
       const a = new Audio("/sounds/ding.mp3");
       a.loop = false;
-      // 通知音は小さめが好みなので noiseVolume と無関係にやや控えめ
+      // 通知音はやや控えめ（端末音量で調整）
       a.volume = 0.9;
       void a.play();
     } catch {}
@@ -1159,6 +1152,10 @@ export default function Home() {
 
   /** Stripe Checkout へ（サーバーがセッション作成、秘密鍵は API のみ） */
   const startPremiumCheckout = useCallback(async () => {
+    if (!authUserId) {
+      router.push("/login");
+      return;
+    }
     setPremiumCheckoutError(null);
     setPremiumCheckoutLoading(true);
     try {
@@ -1179,10 +1176,14 @@ export default function Home() {
       setPremiumCheckoutError("通信に失敗しました");
       setPremiumCheckoutLoading(false);
     }
-  }, []);
+  }, [authUserId, router]);
 
   /** Stripe Customer Portal（解約・お支払い方法など） */
   const openStripeCustomerPortal = useCallback(async () => {
+    if (!authUserId) {
+      router.push("/login");
+      return;
+    }
     try {
       const { data: authData } = await supabase.auth.getSession();
       const token = authData.session?.access_token;
@@ -1199,7 +1200,7 @@ export default function Home() {
     } catch {
       console.error("[stripe portal] 通信に失敗しました");
     }
-  }, []);
+  }, [authUserId, router]);
 
   const handleLogout = useCallback(async () => {
     setLogoutLoading(true);
@@ -1448,26 +1449,6 @@ export default function Home() {
                 >
                   ホワイトノイズ
                 </button>
-                <div className="mx-3 border-t border-white/10" />
-                {isLoggedIn ? (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    disabled={logoutLoading}
-                    className="flex w-full min-h-[44px] items-center px-4 py-2.5 text-left text-[15px] font-medium text-white/90 transition hover:bg-white/10 active:bg-white/12 disabled:opacity-50"
-                    onClick={() => void handleLogout()}
-                  >
-                    {logoutLoading ? "ログアウト中…" : "ログアウト"}
-                  </button>
-                ) : (
-                  <Link
-                    href="/login"
-                    className="flex w-full min-h-[44px] items-center px-4 py-2.5 text-left text-[15px] font-medium text-white/90 transition hover:bg-white/10 active:bg-white/12"
-                    onClick={() => setIsQuickSettingsOpen(false)}
-                  >
-                    ログイン
-                  </Link>
-                )}
               </div>
             ) : null}
           </div>
@@ -1475,7 +1456,7 @@ export default function Home() {
       )}
       <div className="relative flex min-h-0 flex-1 flex-col px-5 pb-[max(20px,env(safe-area-inset-bottom))] text-white sm:px-6">
         {/* 上部: タスク（固定高さ帯・主ブロックの上に補助として配置） */}
-        <div className="relative mx-auto w-full max-w-sm shrink-0 space-y-1.5 pt-[max(18px,calc(env(safe-area-inset-top)+58px))] pb-2 sm:max-w-md sm:pt-[max(20px,calc(env(safe-area-inset-top)+60px))] sm:pb-3">
+        <div className="relative mx-auto w-full max-w-sm shrink-0 space-y-1.5 pt-[calc(env(safe-area-inset-top)+72px)] pb-2 sm:max-w-md sm:pb-3">
           <p className="text-[10px] font-medium tracking-[0.16em] text-white/38">現在のタスク</p>
           <div className={isTaskQuickPickerOpen ? "relative z-[60]" : "relative"}>
             {isTaskQuickPickerOpen ? (
@@ -1907,18 +1888,6 @@ export default function Home() {
         </h2>
         <div className="mb-4 rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2">
           <p className="text-[11px] text-white/70 leading-snug">{selectedMixSummary}</p>
-        </div>
-        <div className="mb-5">
-          <label className="block text-sm text-white/70 mb-2">音量</label>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={noiseVolume}
-            onChange={(e) => setNoiseVolume(Number(e.target.value))}
-            className="w-full h-2 rounded-full appearance-none bg-white/20 accent-white"
-          />
-          <span className="text-sm text-white/60">{noiseVolume}%</span>
         </div>
         <div className="mb-6 space-y-4">
           <div>

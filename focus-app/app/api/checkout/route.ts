@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getOrigin, getSupabaseUserIdFromRequest } from "@/lib/apiServerHelpers";
+import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
 
 /**
  * Stripe Checkout（サブスクリプション）セッションを作成。
@@ -36,11 +37,25 @@ export async function POST(req: Request) {
     const stripe = new Stripe(secret);
     const origin = getOrigin(req);
 
+    let existingStripeCustomerId: string | undefined;
+    const admin = createSupabaseAdminClient();
+    if (admin) {
+      const { data: profile } = await admin
+        .from("user_profiles")
+        .select("stripe_customer_id")
+        .eq("id", supabaseUserId)
+        .maybeSingle();
+      existingStripeCustomerId = profile?.stripe_customer_id?.trim() || undefined;
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${origin}/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/cancel`,
+      ...(existingStripeCustomerId
+        ? { customer: existingStripeCustomerId }
+        : { customer_creation: "always" as const }),
       metadata: {
         supabase_user_id: supabaseUserId,
       },
