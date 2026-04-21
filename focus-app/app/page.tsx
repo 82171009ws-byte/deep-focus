@@ -18,7 +18,10 @@ import {
   migrateLocalTasksIfNeeded,
 } from "@/lib/taskSessionSync";
 import { AppMenuDrawer } from "@/components/AppMenuDrawer";
+import { PremiumUpsellModal } from "@/components/PremiumUpsellModal";
 import { HomeSettingsFromQuery, type HomeSettingsHandlers } from "@/components/HomeSettingsFromQuery";
+import { createPremiumCheckoutSession } from "@/lib/premiumCheckoutClient";
+import { usePremiumFeatureGate } from "@/hooks/usePremiumFeatureGate";
 
 // -----------------------------------------------------------------------------
 // Types
@@ -217,6 +220,8 @@ interface BackgroundTheme {
   label: string;
   backgroundImage: string;
   overlay: string;
+  /** 無料テーマ以外は true（表示は常にするがタップ時に Premium 導線） */
+  isPremium?: boolean;
   // 将来拡張用: テーマ別の推奨ノイズ・発光演出などを追加しやすくしておく
   recommendedNoise?: string[];
   accentGlow?: string;
@@ -238,6 +243,7 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
     backgroundImage:
       "radial-gradient(circle at 25% 15%, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0) 40%), linear-gradient(160deg, #2a1406 0%, #b36b2a 45%, #f2c27c 100%)",
     overlay: "rgba(0,0,0,0.32)",
+    isPremium: true,
   },
   {
     key: "snow",
@@ -246,6 +252,7 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
     backgroundImage:
       "radial-gradient(circle at 30% 10%, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 45%), linear-gradient(160deg, #0b1b2a 0%, #3b6a8d 45%, #d7e8f4 100%)",
     overlay: "rgba(0,0,0,0.28)",
+    isPremium: true,
   },
   {
     key: "forest",
@@ -254,6 +261,7 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
     backgroundImage:
       "radial-gradient(circle at 18% 10%, rgba(205,255,222,0.18) 0%, rgba(205,255,222,0) 40%), radial-gradient(circle at 84% 78%, rgba(68,160,112,0.16) 0%, rgba(68,160,112,0) 45%), linear-gradient(158deg, #061710 0%, #123828 48%, #1f4d33 100%)",
     overlay: "rgba(0,0,0,0.36)",
+    isPremium: true,
     recommendedNoise: ["seseragi", "takibi"],
     accentGlow: "rgba(46, 204, 113, 0.22)",
   },
@@ -264,6 +272,7 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
     backgroundImage:
       "radial-gradient(circle at 22% 12%, rgba(214,240,255,0.20) 0%, rgba(214,240,255,0) 42%), radial-gradient(circle at 78% 80%, rgba(69,166,214,0.16) 0%, rgba(69,166,214,0) 48%), linear-gradient(162deg, #071a2a 0%, #0f3c67 50%, #1f6a8f 100%)",
     overlay: "rgba(0,0,0,0.32)",
+    isPremium: true,
     recommendedNoise: ["ocean", "rain"],
     accentGlow: "rgba(94, 201, 255, 0.2)",
   },
@@ -284,6 +293,7 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
     backgroundImage:
       "radial-gradient(circle at 25% 15%, rgba(255,255,255,0.65) 0%, rgba(255,255,255,0) 45%), linear-gradient(155deg, #b7f4e3 0%, #7fe8d8 45%, #6bd7ff 100%)",
     overlay: "rgba(0,0,0,0.18)",
+    isPremium: true,
   },
   {
     key: "peach",
@@ -292,6 +302,7 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
     backgroundImage:
       "radial-gradient(circle at 25% 15%, rgba(255,255,255,0.65) 0%, rgba(255,255,255,0) 45%), linear-gradient(155deg, #ffd1b8 0%, #ffb1c8 45%, #ffc6a5 100%)",
     overlay: "rgba(0,0,0,0.20)",
+    isPremium: true,
   },
   {
     key: "lavender",
@@ -300,6 +311,7 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
     backgroundImage:
       "radial-gradient(circle at 30% 12%, rgba(255,255,255,0.65) 0%, rgba(255,255,255,0) 45%), linear-gradient(155deg, #e6d7ff 0%, #cbb8ff 45%, #a9b8ff 100%)",
     overlay: "rgba(0,0,0,0.22)",
+    isPremium: true,
   },
   {
     key: "sky",
@@ -308,6 +320,7 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
     backgroundImage:
       "radial-gradient(circle at 30% 12%, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0) 45%), linear-gradient(155deg, #b9e7ff 0%, #a9c7ff 45%, #d7f3ff 100%)",
     overlay: "rgba(0,0,0,0.16)",
+    isPremium: true,
   },
 ];
 
@@ -530,7 +543,8 @@ export default function Home() {
   const router = useRouter();
   const [timerStatus, setTimerStatus] = useState<TimerStatus>("idle");
   const [isNoiseModalOpen, setIsNoiseModalOpen] = useState(false);
-  const [isPremiumNoiseUpsellOpen, setIsPremiumNoiseUpsellOpen] = useState(false);
+  const [isPremiumUpsellOpen, setIsPremiumUpsellOpen] = useState(false);
+  const [premiumThemeRevertMessage, setPremiumThemeRevertMessage] = useState<string | null>(null);
   const [premiumCheckoutLoading, setPremiumCheckoutLoading] = useState(false);
   const [premiumCheckoutError, setPremiumCheckoutError] = useState<string | null>(null);
   const [isFullscreenMode, setIsFullscreenMode] = useState(false);
@@ -713,6 +727,14 @@ export default function Home() {
   /** ログインかつ user_profiles.is_premium が true のときのみ有料機能を解放 */
   const isPremiumUnlocked = Boolean(authUserId && isPremiumUser);
 
+  const openPremiumUpsell = useCallback(() => setIsPremiumUpsellOpen(true), []);
+
+  const requestPremiumFeature = usePremiumFeatureGate({
+    authUserId,
+    isPremiumUser,
+    onNeedPremium: openPremiumUpsell,
+  });
+
   // 無料ユーザーは「1つだけ」選べる。プレミアム音は選べない（ストレージずれにも対応）
   useEffect(() => {
     if (isPremiumUnlocked) return;
@@ -728,6 +750,22 @@ export default function Home() {
       setSelectedNoise("none");
     }
   }, [isPremiumUnlocked, selectedNoise, selectedNoise2]);
+
+  // 非課金時に Premium テーマが localStorage から読み込まれたら無料テーマへ戻す
+  useEffect(() => {
+    if (isPremiumUnlocked) return;
+    const meta = BACKGROUND_THEMES.find((x) => x.key === backgroundTheme);
+    if (meta?.isPremium) {
+      setPremiumThemeRevertMessage("Premiumテーマは現在利用できないため Night に戻しました");
+      setBackgroundTheme(DEFAULT_BACKGROUND_THEME);
+    }
+  }, [isPremiumUnlocked, backgroundTheme]);
+
+  useEffect(() => {
+    if (!premiumThemeRevertMessage) return;
+    const id = window.setTimeout(() => setPremiumThemeRevertMessage(null), 4500);
+    return () => window.clearTimeout(id);
+  }, [premiumThemeRevertMessage]);
 
   // タイマー刻み（既存ロジックを活かす）
   useEffect(() => {
@@ -1035,7 +1073,7 @@ export default function Home() {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         exitFullscreen();
-        if (isPremiumNoiseUpsellOpen) setIsPremiumNoiseUpsellOpen(false);
+        if (isPremiumUpsellOpen) setIsPremiumUpsellOpen(false);
         else if (isNoiseModalOpen) setIsNoiseModalOpen(false);
         else if (isThemeModalOpen) setIsThemeModalOpen(false);
         else if (isQuickSettingsOpen) setIsQuickSettingsOpen(false);
@@ -1047,18 +1085,18 @@ export default function Home() {
   }, [
     exitFullscreen,
     isNoiseModalOpen,
-    isPremiumNoiseUpsellOpen,
+    isPremiumUpsellOpen,
     isThemeModalOpen,
     isQuickSettingsOpen,
     isTaskQuickPickerOpen,
   ]);
 
   useEffect(() => {
-    if (!isPremiumNoiseUpsellOpen) {
+    if (!isPremiumUpsellOpen) {
       setPremiumCheckoutError(null);
       setPremiumCheckoutLoading(false);
     }
-  }, [isPremiumNoiseUpsellOpen]);
+  }, [isPremiumUpsellOpen]);
 
   const handleMainButton = useCallback(() => {
     if (timerStatus === "idle") {
@@ -1117,7 +1155,7 @@ export default function Home() {
     } else if (typeof window !== "undefined") {
       localStorage.setItem(STORAGE_KEYS.noise, JSON.stringify(payload));
     }
-    setIsPremiumNoiseUpsellOpen(false);
+    setIsPremiumUpsellOpen(false);
     setIsNoiseModalOpen(false);
   };
 
@@ -1159,19 +1197,17 @@ export default function Home() {
     setPremiumCheckoutError(null);
     setPremiumCheckoutLoading(true);
     try {
-      const { data: authData } = await supabase.auth.getSession();
-      const token = authData.session?.access_token;
-      const res = await fetch("/api/checkout", {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      const data = (await res.json()) as { url?: string; error?: string };
-      if (!res.ok || !data.url) {
-        setPremiumCheckoutError(data.error ?? "決済の準備に失敗しました");
+      const result = await createPremiumCheckoutSession();
+      if (!result.ok) {
+        if ("needsLogin" in result) {
+          router.push("/login");
+        } else {
+          setPremiumCheckoutError(result.error);
+        }
         setPremiumCheckoutLoading(false);
         return;
       }
-      window.location.assign(data.url);
+      window.location.assign(result.url);
     } catch {
       setPremiumCheckoutError("通信に失敗しました");
       setPremiumCheckoutLoading(false);
@@ -1251,10 +1287,10 @@ export default function Home() {
   settingsQueryHandlersRef.current = {
     openTheme: () => setIsThemeModalOpen(true),
     openNoise: () => {
-      setIsPremiumNoiseUpsellOpen(false);
+      setIsPremiumUpsellOpen(false);
       setIsNoiseModalOpen(true);
     },
-    openPremium: () => setIsPremiumNoiseUpsellOpen(true),
+    openPremium: () => requestPremiumFeature(() => {}),
     openBilling: () => void openStripeCustomerPortal(),
   };
 
@@ -1290,15 +1326,24 @@ export default function Home() {
           const pastelThemes = BACKGROUND_THEMES.filter((t) => t.type === "pastel");
           const renderThemeCard = (t: BackgroundTheme) => {
             const active = t.key === backgroundTheme;
+            const isPremiumTheme = Boolean(t.isPremium);
             return (
               <button
                 key={t.key}
                 type="button"
-                onClick={() => setBackgroundTheme(t.key)}
+                onClick={() => {
+                  if (isPremiumTheme) {
+                    requestPremiumFeature(() => setBackgroundTheme(t.key));
+                    return;
+                  }
+                  setBackgroundTheme(t.key);
+                }}
                 className={`relative overflow-hidden rounded-2xl border text-left transition ${
                   active
                     ? "border-white/60 ring-1 ring-white/30"
-                    : "border-white/10 hover:border-white/25"
+                    : isPremiumTheme
+                      ? "border-amber-400/25 hover:border-amber-300/35"
+                      : "border-white/10 hover:border-white/25"
                 }`}
               >
                 <div
@@ -1308,9 +1353,16 @@ export default function Home() {
                 />
                 <div className="absolute inset-0" style={{ background: t.overlay }} aria-hidden />
                 <div className="relative p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold">{t.label}</span>
-                    {active && <span className="text-sm">✓</span>}
+                  <div className="flex items-start justify-between gap-1">
+                    <span className="text-sm font-semibold leading-tight">{t.label}</span>
+                    <span className="flex shrink-0 flex-col items-end gap-0.5">
+                      {isPremiumTheme && (
+                        <span className="text-[9px] font-medium tracking-wide text-amber-200/95">
+                          🔒 Premium
+                        </span>
+                      )}
+                      {active && <span className="text-sm leading-none">✓</span>}
+                    </span>
                   </div>
                   <div className="mt-1 text-[11px] text-white/65">
                     {t.key === "sea"
@@ -1443,7 +1495,7 @@ export default function Home() {
                   className="flex w-full min-h-[44px] items-center px-4 py-2.5 text-left text-[15px] font-medium text-white/90 transition hover:bg-white/10 active:bg-white/12"
                   onClick={() => {
                     setIsQuickSettingsOpen(false);
-                    setIsPremiumNoiseUpsellOpen(false);
+                    setIsPremiumUpsellOpen(false);
                     setIsNoiseModalOpen(true);
                   }}
                 >
@@ -1778,7 +1830,10 @@ export default function Home() {
           type="button"
           onClick={() => {
             if (locked) {
-              setIsPremiumNoiseUpsellOpen(true);
+              requestPremiumFeature(() => {
+                setSelectedNoise(opt.id);
+                previewNoise(opt);
+              });
               return;
             }
 
@@ -1872,7 +1927,7 @@ export default function Home() {
       className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60"
       style={{ display: isNoiseModalOpen ? "flex" : "none" }}
       onClick={() => {
-        setIsPremiumNoiseUpsellOpen(false);
+        setIsPremiumUpsellOpen(false);
         setIsNoiseModalOpen(false);
       }}
       role="dialog"
@@ -1889,6 +1944,18 @@ export default function Home() {
         <div className="mb-4 rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2">
           <p className="text-[11px] text-white/70 leading-snug">{selectedMixSummary}</p>
         </div>
+        {!isPremiumUnlocked ? (
+          <button
+            type="button"
+            onClick={() => requestPremiumFeature(() => {})}
+            className="mb-5 w-full rounded-xl border border-amber-400/28 bg-amber-400/[0.07] px-3 py-2.5 text-left transition hover:bg-amber-400/12"
+          >
+            <span className="text-[12px] font-medium text-white/88">🔒 2つ同時再生はPremium</span>
+            <span className="mt-0.5 block text-[10px] leading-snug text-white/48">
+              ログイン後に案内できます。ミックス再生はPremiumで解放されます。
+            </span>
+          </button>
+        ) : null}
         <div className="mb-6 space-y-4">
           <div>
             <h3 className="text-xs font-medium text-white/45 mb-2 tracking-wide">無料</h3>
@@ -1921,81 +1988,14 @@ export default function Home() {
     </div>
   );
 
-  /** 有料ホワイトノイズタップ時の案内（課金導線は未接続の仮 UI） */
-  const premiumNoiseUpsellModal = (
-    <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/55 p-4"
-      style={{ display: isPremiumNoiseUpsellOpen ? "flex" : "none" }}
-      onClick={() => setIsPremiumNoiseUpsellOpen(false)}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="premium-noise-upsell-title"
-    >
-      <div
-        className="w-full max-w-sm rounded-2xl bg-gray-900 border border-white/10 p-5 shadow-xl text-white"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 id="premium-noise-upsell-title" className="text-base font-semibold mb-2 leading-snug">
-          集中を深めるサウンドを、すべて解放
-        </h3>
-        <p className="text-sm text-white/70 mb-3 leading-relaxed">
-          プレミアムなら、作業に合わせて選べるホワイトノイズがひとまとまり。環境音で余計な雑念を減らし、スイッチを入れたように集中のリズムを整えられます。
-        </p>
-        <ul className="text-sm text-white/85 space-y-2 mb-4 pl-0 list-none">
-          <li className="flex gap-2">
-            <span className="text-emerald-400/90 shrink-0" aria-hidden>
-              ✓
-            </span>
-            <span>より集中しやすい<strong className="text-white/95 font-medium"> 追加サウンド</strong>をいつでも利用できる</span>
-          </li>
-          <li className="flex gap-2">
-            <span className="text-emerald-400/90 shrink-0" aria-hidden>
-              ✓
-            </span>
-            <span>2つの環境音を<strong className="text-white/95 font-medium">同時に再生</strong>できます</span>
-          </li>
-          <li className="flex gap-2">
-            <span className="text-emerald-400/90 shrink-0" aria-hidden>
-              ✓
-            </span>
-            <span>
-              <strong className="text-white/95 font-medium">雨・カフェ・チクタク・秒読み</strong> などを今すぐ解放
-            </span>
-          </li>
-          <li className="flex gap-2">
-            <span className="text-emerald-400/90 shrink-0" aria-hidden>
-              ✓
-            </span>
-            <span>今後リリースされる新サウンドも、<strong className="text-white/95 font-medium">プレミアムで利用予定</strong></span>
-          </li>
-        </ul>
-        {premiumCheckoutError && (
-          <p
-            className="text-center text-xs text-red-300/95 mb-3 py-1.5 px-2 rounded-lg bg-red-500/15 border border-red-500/25 leading-snug"
-            role="alert"
-          >
-            {premiumCheckoutError}
-          </p>
-        )}
-        <div className="flex flex-col gap-2">
-          <button
-            type="button"
-            disabled={premiumCheckoutLoading}
-            className="w-full py-2.5 rounded-xl bg-white text-gray-900 text-sm font-semibold hover:bg-white/90 shadow-sm disabled:opacity-60 disabled:pointer-events-none"
-            onClick={() => void startPremiumCheckout()}
-          >
-            {premiumCheckoutLoading ? "Checkout へ移動中…" : "プレミアムについて見る"}
-          </button>
-          <button
-            type="button"
-            className="w-full py-2.5 rounded-xl bg-white/10 border border-white/20 text-sm font-medium text-white/90 hover:bg-white/15"
-            onClick={() => setIsPremiumNoiseUpsellOpen(false)}
-          >
-            閉じる
-          </button>
-        </div>
-      </div>
-    </div>
+  const premiumUpsellModal = (
+    <PremiumUpsellModal
+      open={isPremiumUpsellOpen}
+      onClose={() => setIsPremiumUpsellOpen(false)}
+      onStartPremium={() => void startPremiumCheckout()}
+      checkoutLoading={premiumCheckoutLoading}
+      checkoutError={premiumCheckoutError}
+    />
   );
 
   // 停止確認モーダル
@@ -2076,7 +2076,7 @@ export default function Home() {
       {fullscreenUI}
 
       {noiseModal}
-      {premiumNoiseUpsellModal}
+      {premiumUpsellModal}
       {themeModal}
       {stopConfirmModal}
 
@@ -2087,6 +2087,15 @@ export default function Home() {
         logoutLoading={logoutLoading}
         onLogout={handleLogout}
       />
+
+      {premiumThemeRevertMessage ? (
+        <div
+          role="status"
+          className="fixed bottom-[max(20px,env(safe-area-inset-bottom))] left-1/2 z-[220] max-w-[min(22rem,calc(100vw-32px))] -translate-x-1/2 rounded-xl border border-white/15 bg-[#0e141c]/95 px-4 py-2.5 text-center text-[13px] leading-snug text-white/90 shadow-lg backdrop-blur-md"
+        >
+          {premiumThemeRevertMessage}
+        </div>
+      ) : null}
     </main>
   );
 }
