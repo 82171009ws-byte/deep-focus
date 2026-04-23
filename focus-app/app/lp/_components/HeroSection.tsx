@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { OCEAN_ON_ACCENT } from "@/lib/brandLayout";
 import { LP_HERO } from "../copy";
 
 export function HeroSection() {
@@ -17,7 +18,7 @@ export function HeroSection() {
         <div className="mt-10 flex flex-col items-stretch gap-3 sm:flex-row sm:justify-center sm:gap-4">
           <Link
             href="/"
-            className="inline-flex min-h-12 items-center justify-center rounded-lg bg-white px-6 text-sm font-medium text-[#0b0f14] transition hover:bg-white/90"
+            className={`inline-flex min-h-12 items-center justify-center rounded-lg bg-white px-6 text-sm font-medium ${OCEAN_ON_ACCENT} transition hover:bg-white/90`}
           >
             {LP_HERO.ctaPrimary}
           </Link>

@@ -11,7 +11,7 @@ export function FaqSection() {
           {LP_FAQ.map((item) => (
             <div
               key={item.q}
-              className="rounded-xl border border-white/10 bg-white/[0.03] p-5 md:p-6"
+              className="rounded-xl border border-white/10 bg-white/5 p-5 md:p-6"
             >
               <dt className="font-medium text-white">{item.q}</dt>
               <dd className="mt-3 text-sm leading-relaxed text-white/75">

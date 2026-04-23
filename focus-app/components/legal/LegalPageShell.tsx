@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { OCEAN_RADIAL_BG } from "@/lib/brandLayout";
 
 type LegalPageShellProps = {
   title: string;
@@ -8,7 +9,9 @@ type LegalPageShellProps = {
 
 export function LegalPageShell({ title, children }: LegalPageShellProps) {
   return (
-    <main className="min-h-dvh bg-[#0b0f14] text-white px-4 py-10 md:py-14">
+    <main
+      className={`min-h-dvh text-white ${OCEAN_RADIAL_BG} px-4 py-10 md:py-14`}
+    >
       <div className="mx-auto max-w-2xl space-y-8">
         <div>
           <Link

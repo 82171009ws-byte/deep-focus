@@ -4,14 +4,14 @@ import { LegalPageShell } from "@/components/legal/LegalPageShell";
 
 export const metadata: Metadata = {
   title: "プライバシーポリシー | Deep Focus",
-  description: "Deep Focus のプライバシーポリシー（簡易版・仮置き）です。",
+  description: "Deep Focus のプライバシーポリシーです。",
 };
 
 export default function PrivacyPage() {
   return (
     <LegalPageShell title="プライバシーポリシー">
-      <p className="text-white/55 text-xs">
-        以下は簡易版の仮テキストです。取得するデータ・第三者提供の有無は実装に合わせて更新してください。
+      <p className="text-white/60 text-xs">
+        本ポリシーは、個人情報の取扱いを定めます。改定の際は、本ページに掲出します。
       </p>
 
       <section className="space-y-3">

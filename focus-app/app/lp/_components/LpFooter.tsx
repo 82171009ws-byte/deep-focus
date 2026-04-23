@@ -3,11 +3,11 @@ import { LP_FOOTER_LINKS, LP_HERO } from "../copy";
 
 export function LpFooter() {
   return (
-    <footer className="border-t border-white/10 bg-black/20 px-4 py-12 md:py-14">
+    <footer className="border-t border-white/10 bg-white/5 px-4 py-12 md:py-14">
       <div className="mx-auto flex max-w-5xl flex-col gap-10 md:flex-row md:items-start md:justify-between">
         <div>
           <p className="text-sm font-semibold text-white">{LP_HERO.productName}</p>
-          <p className="mt-2 max-w-xs text-xs leading-relaxed text-white/55">
+          <p className="mt-2 max-w-xs text-xs leading-relaxed text-white/65">
             集中のための Web アプリ。タイマーと環境音で作業に入りやすい空間を。
           </p>
         </div>

@@ -1,5 +1,5 @@
 /**
- * LP および法務ページの仮文言。Stripe 審査・集客向けに後から差し替えやすくするため集約しています。
+ * LP のコピー・料金表記。特定商取引法ページと表記を揃えて更新してください。
  */
 
 export const LP_HERO = {
@@ -39,11 +39,10 @@ export const LP_FEATURES = [
   },
 ] as const;
 
-/** 料金表示はプレースホルダー。Stripe ダッシュボードと合わせて更新してください。 */
 export const LP_PREMIUM = {
   heading: "Premiumプラン（月額）",
-  priceDisplay: "¥480 / 月（税込）※仮の表示です",
-  note: "※ 実際の料金・請求タイミングは決済画面の表示に準じます。",
+  priceDisplay: "¥490 / 月（税込）",
+  note: "表示の料金・課金タイミングの詳細は、決済画面（Stripe）の表記に準じます。",
   benefits: [
     "全テーマ解放",
     "ホワイトノイズ2つ同時再生",
@@ -54,7 +53,7 @@ export const LP_PREMIUM = {
 
 export const LP_SCREENSHOTS = {
   heading: "アプリの様子",
-  captions: ["メイン画面（差し替え予定）", "設定・レポート（差し替え予定）"],
+  captions: ["メイン画面", "設定・レポート"] as const,
 } as const;
 
 export const LP_FAQ = [

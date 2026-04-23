@@ -3,14 +3,14 @@ import { LegalPageShell } from "@/components/legal/LegalPageShell";
 
 export const metadata: Metadata = {
   title: "利用規約 | Deep Focus",
-  description: "Deep Focus の利用規約（簡易版・仮置き）です。",
+  description: "Deep Focus の利用規約です。",
 };
 
 export default function TermsPage() {
   return (
     <LegalPageShell title="利用規約">
-      <p className="text-white/55 text-xs">
-        以下は簡易版の仮テキストです。正式な条項は法務確認のうえ差し替えてください。
+      <p className="text-white/60 text-xs">
+        本規約の変更にあたり、本ページを更新します。重要な変更の際は、合理的な周知の方法にてお知らせする場合があります。
       </p>
 
       <section className="space-y-3">
@@ -37,7 +37,7 @@ export default function TermsPage() {
       <section className="space-y-3">
         <h2 className="text-base font-semibold text-white">第4条（免責・準拠法）</h2>
         <p>
-          本サービスは現状有姿で提供されます。紛争が生じた場合の準拠法および管轄裁判所は、別途定めるところによるか、運営者所在地を管轄する裁判所とします（要差し替え）。
+          本サービスは現状有姿で提供されます。本規約の準拠法は日本国法とし、本サービスに関し紛争が生じた場合は、運営者所在地を管轄とする地方裁判所を専属的合意管轄とします。
         </p>
       </section>
     </LegalPageShell>

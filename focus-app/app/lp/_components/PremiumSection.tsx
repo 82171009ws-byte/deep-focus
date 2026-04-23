@@ -1,17 +1,18 @@
 import Link from "next/link";
+import { OCEAN_ON_ACCENT } from "@/lib/brandLayout";
 import { LP_PREMIUM } from "../copy";
 
 export function PremiumSection() {
   return (
-    <section className="border-y border-white/10 bg-white/[0.02] px-4 py-16 md:py-20">
+    <section className="border-y border-white/10 bg-white/[0.03] px-4 py-16 md:py-20">
       <div className="mx-auto max-w-3xl">
         <h2 className="text-center text-xl font-semibold text-white md:text-2xl">
           Premium
         </h2>
-        <p className="mx-auto mt-3 max-w-xl text-center text-sm text-white/60">
+        <p className="mx-auto mt-3 max-w-xl text-center text-sm text-white/70">
           有料プランで追加の集中体験と詳細機能が利用できます。
         </p>
-        <div className="mx-auto mt-10 max-w-lg rounded-2xl border border-emerald-500/30 bg-[#0b0f14] p-6 md:p-8">
+        <div className="mx-auto mt-10 max-w-lg rounded-2xl border border-white/10 bg-white/5 p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.04)_inset] md:p-8">
           <p className="text-center text-sm font-medium text-emerald-400/95">
             {LP_PREMIUM.heading}
           </p>
@@ -41,7 +42,7 @@ export function PremiumSection() {
             </Link>
             <Link
               href="/"
-              className="inline-flex min-h-11 items-center justify-center rounded-lg bg-white px-5 text-sm font-medium text-[#0b0f14] hover:bg-white/90"
+              className={`inline-flex min-h-11 items-center justify-center rounded-lg bg-white px-5 text-sm font-medium ${OCEAN_ON_ACCENT} hover:bg-white/90`}
             >
               アプリを開く
             </Link>

@@ -6,6 +6,7 @@ import { HeroSection } from "./_components/HeroSection";
 import { LpFooter } from "./_components/LpFooter";
 import { PremiumSection } from "./_components/PremiumSection";
 import { ScreenshotsSection } from "./_components/ScreenshotsSection";
+import { OCEAN_RADIAL_BG } from "@/lib/brandLayout";
 
 export const metadata: Metadata = {
   title: "Deep Focus — 集中のためのシンプルなタイマーアプリ",
@@ -20,8 +21,8 @@ export const metadata: Metadata = {
 
 export default function LandingPage() {
   return (
-    <div className="min-h-dvh bg-[#0b0f14] text-white">
-      <header className="sticky top-0 z-10 border-b border-white/10 bg-[#0b0f14]/90 backdrop-blur-md">
+    <div className={`min-h-dvh text-white ${OCEAN_RADIAL_BG}`}>
+      <header className="sticky top-0 z-10 border-b border-white/10 bg-white/5 backdrop-blur-md">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3">
           <Link href="/lp" className="text-sm font-semibold tracking-tight text-white">
             Deep Focus

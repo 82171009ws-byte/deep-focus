@@ -1,8 +1,9 @@
 import Link from "next/link";
+import { OCEAN_RADIAL_BG } from "@/lib/brandLayout";
 
 export default function PremiumAboutPage() {
   return (
-    <main className="min-h-dvh bg-[#0b0f14] text-white px-4 py-10">
+    <main className={`min-h-dvh text-white ${OCEAN_RADIAL_BG} px-4 py-10`}>
       <div className="mx-auto max-w-md space-y-6">
         <div>
           <Link
@@ -21,8 +22,8 @@ export default function PremiumAboutPage() {
           <p>
             アプリ内の案内から購入手続きができます。ログインしたアカウントに紐づいて有効になります。
           </p>
-          <p className="text-white/55 text-xs">
-            請求やプラン変更は、今後 Stripe Customer Portal から行える予定です。
+          <p className="text-white/60 text-xs">
+            料金の確認・解約手続は、Stripe の Customer Portal またはアプリ内の案内に従って行えます。
           </p>
         </div>
       </div>
