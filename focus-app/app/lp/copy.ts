@@ -53,7 +53,21 @@ export const LP_PREMIUM = {
 
 export const LP_SCREENSHOTS = {
   heading: "アプリの様子",
-  captions: ["メイン画面", "設定・レポート"] as const,
+  /** PC / スマホのデバイスモック（`public` 配下） */
+  mockups: [
+    {
+      src: "/images/mockup-pc.png",
+      alt: "PCブラウザで Deep Focus を表示した画面",
+      width: 1200,
+      height: 750,
+    },
+    {
+      src: "/images/mockup-mobile.png",
+      alt: "スマートフォンで Deep Focus を表示した画面",
+      width: 750,
+      height: 1200,
+    },
+  ] as const,
 } as const;
 
 export const LP_FAQ = [
