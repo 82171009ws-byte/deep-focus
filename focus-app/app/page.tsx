@@ -106,7 +106,7 @@ function getModeLabel(mode: PomodoroMode): string {
   }
 }
 
-// ホワイトノイズ（配列順 = 同一カテゴリ内の表示順）。ding.mp3 は完了通知専用のため含めない。
+// ホワイトノイズ（配列順 = 同一カテゴリ内の表示順）。タイマー完了音は /sounds/complete.mp3 で別途再生するため含めない。
 type SoundOption = {
   id: string;
   label: string;
@@ -717,11 +717,46 @@ export default function Home() {
   const audioRefs = useRef<HTMLAudioElement[]>([]);
   const fullscreenControlsHideTimeoutRef = useRef<number | null>(null);
   const activeDateKeyRef = useRef(getTodayKey());
+  /** 作業中かつ再生中のときだけ true（ノイズの ended フォールバック用） */
+  const noisePlayAllowedRef = useRef(false);
+  /** 自然終了の完了音は1セッション1回（idle→running でリセット） */
+  const hasPlayedCompleteSoundRef = useRef(false);
+  const completeSoundAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const isIdle = timerStatus === "idle";
   const isRunning = timerStatus === "running";
   const isPaused = timerStatus === "paused";
   const running = isRunning;
+
+  useEffect(() => {
+    noisePlayAllowedRef.current = isRunning && mode === "work";
+  }, [isRunning, mode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const a = new Audio("/sounds/complete.mp3");
+      a.preload = "auto";
+      completeSoundAudioRef.current = a;
+      return () => {
+        completeSoundAudioRef.current = null;
+      };
+    } catch {
+      completeSoundAudioRef.current = null;
+    }
+  }, []);
+
+  const playCompleteSound = useCallback(() => {
+    try {
+      const el = completeSoundAudioRef.current ?? new Audio("/sounds/complete.mp3");
+      completeSoundAudioRef.current = el;
+      el.volume = 0.8;
+      el.currentTime = 0;
+      void el.play().catch(() => {});
+    } catch {
+      /* 再生不可でもアプリは継続 */
+    }
+  }, []);
   /** user_profiles.is_premium のミラー（未ログイン時は常に false とみなす） */
   const [isPremiumUser, setIsPremiumUser] = useState<boolean>(false);
   /** ログインかつ user_profiles.is_premium が true のときのみ有料機能を解放 */
@@ -789,7 +824,10 @@ export default function Home() {
             const yesterdayKey = shiftDateKey(todayKey, -1);
             // 参照キーを固定して localStorage との整合性を安定させる
             activeDateKeyRef.current = todayKey;
-            playDing();
+            if (!hasPlayedCompleteSoundRef.current) {
+              hasPlayedCompleteSoundRef.current = true;
+              playCompleteSound();
+            }
             const nextBreakIsLong = sessionIndex >= SESSIONS_BEFORE_LONG;
             setStats((s) => {
               const next = {
@@ -868,7 +906,7 @@ export default function Home() {
       });
     }, 1000);
     return () => clearInterval(t);
-  }, [running, mode, sessionIndex, selectedTaskId, focusPreset, authUserId]);
+  }, [running, mode, sessionIndex, selectedTaskId, focusPreset, authUserId, playCompleteSound]);
 
   // 完了演出は短時間だけ表示
   useEffect(() => {
@@ -989,7 +1027,18 @@ export default function Home() {
       audioRefs.current = noiseFilesKeyInfo.files.map((path) => {
         const audio = new Audio(path);
         audio.loop = true;
+        audio.preload = "auto";
         audio.volume = perVolume;
+        // loop=true でも環境によっては途切れるため、ended で再開するフォールバック
+        audio.addEventListener("ended", () => {
+          if (!noisePlayAllowedRef.current) return;
+          try {
+            audio.currentTime = 0;
+            void audio.play();
+          } catch {
+            /* ignore */
+          }
+        });
         return audio;
       });
 
@@ -1100,6 +1149,7 @@ export default function Home() {
 
   const handleMainButton = useCallback(() => {
     if (timerStatus === "idle") {
+      hasPlayedCompleteSoundRef.current = false;
       setTimerStatus("running");
     } else if (timerStatus === "running") {
       setTimerStatus("paused");
@@ -1177,16 +1227,6 @@ export default function Home() {
       setTimeout(() => a.pause(), 2000);
     } catch {}
   };
-
-  const playDing = useCallback(() => {
-    try {
-      const a = new Audio("/sounds/ding.mp3");
-      a.loop = false;
-      // 通知音はやや控えめ（端末音量で調整）
-      a.volume = 0.9;
-      void a.play();
-    } catch {}
-  }, []);
 
   /** Stripe Checkout へ（サーバーがセッション作成、秘密鍵は API のみ） */
   const startPremiumCheckout = useCallback(async () => {
