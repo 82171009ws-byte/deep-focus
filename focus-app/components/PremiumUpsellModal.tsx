@@ -1,5 +1,7 @@
 "use client";
 
+import { capturePremiumClick } from "@/lib/posthog";
+
 export type PremiumUpsellModalProps = {
   open: boolean;
   onClose: () => void;
@@ -72,7 +74,10 @@ export function PremiumUpsellModal({
             type="button"
             disabled={checkoutLoading}
             className="w-full rounded-xl bg-white py-2.5 text-sm font-semibold text-gray-900 shadow-sm hover:bg-white/90 disabled:pointer-events-none disabled:opacity-60"
-            onClick={() => void onStartPremium()}
+            onClick={() => {
+              capturePremiumClick();
+              void onStartPremium();
+            }}
           >
             {checkoutLoading ? "処理中…" : "Premiumを始める"}
           </button>
