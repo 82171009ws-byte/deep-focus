@@ -1,6 +1,18 @@
 "use client";
 
-import { capturePremiumClick } from "@/lib/posthog";
+import { useEffect } from "react";
+import {
+  capturePremiumClick,
+  captureUpsellDismiss,
+  captureUpsellModalOpen,
+} from "@/lib/posthog";
+
+const PREMIUM_BENEFITS = [
+  "全テーマ解放",
+  "自然音2つ同時再生",
+  "プレミアム自然音",
+  "詳細レポート",
+] as const;
 
 export type PremiumUpsellModalProps = {
   open: boolean;
@@ -18,6 +30,15 @@ export function PremiumUpsellModal({
   checkoutLoading = false,
   checkoutError = null,
 }: PremiumUpsellModalProps) {
+  useEffect(() => {
+    if (open) captureUpsellModalOpen();
+  }, [open]);
+
+  const handleDismiss = () => {
+    captureUpsellDismiss();
+    onClose();
+  };
+
   if (!open) return null;
 
   return (
@@ -26,7 +47,7 @@ export function PremiumUpsellModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="premium-upsell-title"
-      onClick={onClose}
+      onClick={handleDismiss}
     >
       <div
         className="w-full max-w-sm rounded-2xl border border-white/10 bg-gray-900 p-5 text-white shadow-xl"
@@ -35,31 +56,22 @@ export function PremiumUpsellModal({
         <h2 id="premium-upsell-title" className="text-base font-semibold leading-snug">
           Premiumで集中環境を強化
         </h2>
+        <p className="mt-3 text-sm leading-relaxed text-white/75">
+          25分がしんどい日でも、まず10分から。自分に合う音と記録で、集中を続けやすくします。
+        </p>
+        <div className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/10 px-3 py-2.5 text-center">
+          <p className="text-lg font-semibold tabular-nums text-white">月額490円（税込）</p>
+          <p className="mt-0.5 text-xs text-white/60">1日あたり約16円</p>
+        </div>
         <ul className="mt-4 space-y-2.5 text-sm text-white/85 leading-relaxed">
-          <li className="flex gap-2">
-            <span className="text-emerald-400/90 shrink-0" aria-hidden>
-              ✓
-            </span>
-            <span>全テーマ解放</span>
-          </li>
-          <li className="flex gap-2">
-            <span className="text-emerald-400/90 shrink-0" aria-hidden>
-              ✓
-            </span>
-            <span>ノイズ2つ同時再生</span>
-          </li>
-          <li className="flex gap-2">
-            <span className="text-emerald-400/90 shrink-0" aria-hidden>
-              ✓
-            </span>
-            <span>プレミアムノイズ</span>
-          </li>
-          <li className="flex gap-2">
-            <span className="text-emerald-400/90 shrink-0" aria-hidden>
-              ✓
-            </span>
-            <span>詳細レポート</span>
-          </li>
+          {PREMIUM_BENEFITS.map((benefit) => (
+            <li key={benefit} className="flex gap-2">
+              <span className="text-emerald-400/90 shrink-0" aria-hidden>
+                ✓
+              </span>
+              <span>{benefit}</span>
+            </li>
+          ))}
         </ul>
         {checkoutError ? (
           <p
@@ -79,12 +91,12 @@ export function PremiumUpsellModal({
               void onStartPremium();
             }}
           >
-            {checkoutLoading ? "処理中…" : "Premiumを始める"}
+            {checkoutLoading ? "処理中…" : "月490円で集中環境を整える"}
           </button>
           <button
             type="button"
             className="w-full rounded-xl border border-white/20 bg-white/10 py-2.5 text-sm font-medium text-white/90 hover:bg-white/15"
-            onClick={onClose}
+            onClick={handleDismiss}
           >
             あとで
           </button>

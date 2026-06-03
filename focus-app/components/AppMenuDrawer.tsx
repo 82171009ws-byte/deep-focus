@@ -122,6 +122,9 @@ export function AppMenuDrawer({
           <Link href="/settings" onClick={onClose} className={itemClass}>
             設定
           </Link>
+          <Link href="/premium-about" onClick={onClose} className={itemClass}>
+            Premium
+          </Link>
         </nav>
         <div className="shrink-0 border-t border-white/10 p-3">
           {isLoggedIn ? (

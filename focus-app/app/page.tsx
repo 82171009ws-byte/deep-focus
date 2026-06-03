@@ -21,6 +21,7 @@ import { AppMenuDrawer } from "@/components/AppMenuDrawer";
 import { PremiumUpsellModal } from "@/components/PremiumUpsellModal";
 import { HomeSettingsFromQuery, type HomeSettingsHandlers } from "@/components/HomeSettingsFromQuery";
 import { createPremiumCheckoutSession } from "@/lib/premiumCheckoutClient";
+import { captureSoundSelect, captureTimerStart } from "@/lib/posthog";
 import { usePremiumFeatureGate } from "@/hooks/usePremiumFeatureGate";
 
 // -----------------------------------------------------------------------------
@@ -1151,12 +1152,17 @@ export default function Home() {
     if (timerStatus === "idle") {
       hasPlayedCompleteSoundRef.current = false;
       setTimerStatus("running");
+      const presetConfig = getPresetConfig(focusPreset);
+      captureTimerStart({
+        focus_minutes: Math.round(presetConfig.focusSeconds / 60),
+        preset: focusPreset,
+      });
     } else if (timerStatus === "running") {
       setTimerStatus("paused");
     } else {
       setTimerStatus("running");
     }
-  }, [timerStatus]);
+  }, [timerStatus, focusPreset]);
 
   const handleResume = useCallback(() => {
     setTimerStatus("running");
@@ -1227,6 +1233,22 @@ export default function Home() {
       setTimeout(() => a.pause(), 2000);
     } catch {}
   };
+
+  const trackSoundSelect = (opt: SoundOption) => {
+    captureSoundSelect({
+      sound_id: opt.id,
+      sound_label: opt.label,
+      is_premium: opt.isPremium,
+    });
+  };
+
+  const handlePremiumCardClick = useCallback(() => {
+    if (!authUserId) {
+      router.push("/login");
+      return;
+    }
+    setIsPremiumUpsellOpen(true);
+  }, [authUserId, router]);
 
   /** Stripe Checkout へ（サーバーがセッション作成、秘密鍵は API のみ） */
   const startPremiumCheckout = useCallback(async () => {
@@ -1706,6 +1728,15 @@ export default function Home() {
             )}
           </div>
 
+          <div className="w-full max-w-sm space-y-1 text-center sm:max-w-md">
+            <p className="text-[11px] leading-relaxed text-white/52">
+              25分がしんどい日でも、まず10分から。
+            </p>
+            <p className="text-[10px] leading-relaxed text-white/38">
+              仕事終わりや資格勉強前でも、10分だけなら始めやすい。
+            </p>
+          </div>
+
           <div
             className={`flex w-full justify-center gap-2.5 sm:gap-3 ${isIdle ? "opacity-100" : "pointer-events-none opacity-45"}`}
             role="group"
@@ -1761,6 +1792,22 @@ export default function Home() {
               </button>
             )}
           </div>
+
+          {!isPremiumUnlocked ? (
+            <button
+              type="button"
+              onClick={handlePremiumCardClick}
+              className="w-full max-w-sm rounded-2xl border border-amber-400/20 bg-black/25 px-4 py-3 text-left backdrop-blur-sm transition hover:border-amber-300/30 hover:bg-black/35 sm:max-w-md"
+            >
+              <p className="text-[13px] font-medium text-white/88">もっと集中環境を整える</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-white/50">
+                Premiumでは、自然音の2つ同時再生・全テーマ・詳細レポートが使えます。
+              </p>
+              <span className="mt-2 inline-block text-[11px] font-medium text-amber-200/90 underline decoration-amber-300/40 underline-offset-2">
+                Premiumを見る
+              </span>
+            </button>
+          ) : null}
         </div>
       </div>
     </div>
@@ -1873,6 +1920,7 @@ export default function Home() {
               requestPremiumFeature(() => {
                 setSelectedNoise(opt.id);
                 previewNoise(opt);
+                trackSoundSelect(opt);
               });
               return;
             }
@@ -1881,6 +1929,7 @@ export default function Home() {
               setSelectedNoise("none");
               setSelectedNoise2("none");
               previewNoise(opt);
+              trackSoundSelect(opt);
               return;
             }
 
@@ -1888,6 +1937,7 @@ export default function Home() {
               setSelectedNoise(opt.id);
               setSelectedNoise2("none");
               previewNoise(opt);
+              trackSoundSelect(opt);
               return;
             }
 
@@ -1912,6 +1962,7 @@ export default function Home() {
               }
             }
             previewNoise(opt);
+            trackSoundSelect(opt);
           }}
           className={`w-full flex items-center justify-between gap-2 px-4 py-3 rounded-xl text-left transition ${
             locked

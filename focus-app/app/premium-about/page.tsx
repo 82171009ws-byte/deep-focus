@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PremiumAboutCheckout } from "@/components/PremiumAboutCheckout";
 import { OCEAN_RADIAL_BG } from "@/lib/brandLayout";
 
 export default function PremiumAboutPage() {
@@ -26,6 +27,8 @@ export default function PremiumAboutPage() {
             料金の確認・解約手続は、Stripe の Customer Portal またはアプリ内の案内に従って行えます。
           </p>
         </div>
+
+        <PremiumAboutCheckout />
       </div>
     </main>
   );

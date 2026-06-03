@@ -15,6 +15,7 @@ import {
   persistSelectedTaskIdToSupabase,
   updateTaskInSupabase,
 } from "@/lib/tasksSupabase";
+import { captureTaskAdd } from "@/lib/posthog";
 import { persistTasksToLocalStorage, type Task } from "@/lib/tasksLocal";
 
 const SHOW_COMPLETED_KEY = "focus-show-completed";
@@ -115,6 +116,7 @@ export default function TasksPage() {
       if (!authUserId) persistTasksToLocalStorage(next);
       return next;
     });
+    captureTaskAdd();
     setInput("");
   }, [authUserId, input]);
 

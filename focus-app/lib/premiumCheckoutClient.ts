@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabaseClient";
-import { capturePremiumClick } from "@/lib/posthog";
+import { captureCheckoutStart } from "@/lib/posthog";
 
 export type PremiumCheckoutResult =
   | { ok: true; url: string }
@@ -12,7 +12,7 @@ export async function createPremiumCheckoutSession(): Promise<PremiumCheckoutRes
   const token = authData.session?.access_token;
   if (!token) return { ok: false, needsLogin: true };
 
-  capturePremiumClick();
+  captureCheckoutStart();
 
   try {
     const res = await fetch("/api/checkout", {

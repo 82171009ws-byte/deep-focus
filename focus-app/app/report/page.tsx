@@ -7,6 +7,7 @@ import { PremiumUpsellModal } from "@/components/PremiumUpsellModal";
 import { usePremiumFeatureGate } from "@/hooks/usePremiumFeatureGate";
 import { createPremiumCheckoutSession } from "@/lib/premiumCheckoutClient";
 import { supabase } from "@/lib/supabaseClient";
+import { captureReportView } from "@/lib/posthog";
 import { fetchUserPremium } from "@/lib/userProfile";
 
 const STREAK_KEY = "focus-streak";
@@ -74,6 +75,10 @@ export default function ReportPage() {
     achievedToday: false,
   });
   const [dailyGoal, setDailyGoal] = useState(4);
+
+  useEffect(() => {
+    captureReportView();
+  }, []);
 
   useEffect(() => {
     let m = true;

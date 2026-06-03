@@ -7,6 +7,8 @@ export const LP_HERO = {
   tagline: "集中のための、シンプルなタイマーアプリ",
   subcopy:
     "タイマー、ホワイトノイズ、テーマ切り替えで、作業に入りやすい環境を整えるWebアプリです。",
+  focusHook: "25分がしんどい日でも、まず10分から。",
+  focusSubhook: "仕事終わりや資格勉強前でも、10分だけなら始めやすい。",
   ctaPrimary: "今すぐ使う",
   ctaSecondary: "Premiumを見る",
 } as const;

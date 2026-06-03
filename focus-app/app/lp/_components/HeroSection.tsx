@@ -15,6 +15,12 @@ export function HeroSection() {
         <p className="mt-6 text-base leading-relaxed text-white/75 md:text-lg">
           {LP_HERO.subcopy}
         </p>
+        <p className="mt-5 text-sm font-medium leading-relaxed text-emerald-300/90 md:text-base">
+          {LP_HERO.focusHook}
+        </p>
+        <p className="mt-2 text-sm leading-relaxed text-white/60">
+          {LP_HERO.focusSubhook}
+        </p>
         <div className="mt-10 flex flex-col items-stretch gap-3 sm:flex-row sm:justify-center sm:gap-4">
           <Link
             href="/"

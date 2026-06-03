@@ -19,25 +19,63 @@ export function initPostHogClient(): void {
   });
 }
 
-export function capturePremiumClick(): void {
+function safeCapture(event: string, properties?: Record<string, unknown>): void {
   if (typeof window === "undefined") return;
+  if (!process.env.NEXT_PUBLIC_POSTHOG_KEY) return;
   try {
     initPostHogClient();
-    posthog.capture("premium_click");
+    posthog.capture(event, properties);
   } catch {
     /* PostHog 障害でアプリを止めない */
   }
 }
 
+/** Premium開始ボタン押下（1操作1回 — Checkout 側では送らない） */
+export function capturePremiumClick(): void {
+  safeCapture("premium_click");
+}
+
+export function captureUpsellModalOpen(): void {
+  safeCapture("upsell_modal_open");
+}
+
+export function captureUpsellDismiss(): void {
+  safeCapture("upsell_dismiss");
+}
+
+/** Stripe Checkout API 呼び出し直前 */
+export function captureCheckoutStart(): void {
+  safeCapture("checkout_start");
+}
+
+/** /success ページ表示時 */
+export function captureCheckoutSuccess(): void {
+  safeCapture("checkout_success");
+}
+
+export function captureTimerStart(properties?: { focus_minutes?: number; preset?: string }): void {
+  safeCapture("timer_start", properties);
+}
+
+export type SoundSelectProperties = {
+  sound_id: string;
+  sound_label: string;
+  is_premium: boolean;
+};
+
+export function captureSoundSelect(properties: SoundSelectProperties): void {
+  safeCapture("sound_select", properties);
+}
+
+export function captureTaskAdd(): void {
+  safeCapture("task_add");
+}
+
+export function captureReportView(): void {
+  safeCapture("report_view");
+}
+
 /** App Router 用のページビュー（初回・ルート変更時） */
 export function capturePosthogPageView(url: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    initPostHogClient();
-    posthog.capture("$pageview", {
-      $current_url: url,
-    });
-  } catch {
-    /* noop */
-  }
+  safeCapture("$pageview", { $current_url: url });
 }
