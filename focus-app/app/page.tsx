@@ -739,6 +739,7 @@ export default function Home() {
     try {
       const a = new Audio("/sounds/complete.mp3");
       a.preload = "auto";
+      a.volume = 0.8;
       completeSoundAudioRef.current = a;
       return () => {
         completeSoundAudioRef.current = null;
@@ -748,10 +749,12 @@ export default function Home() {
     }
   }, []);
 
+  /** 集中時間が自然終了したときのみ鳴らす（タイマー開始・プリセット変更では呼ばない） */
   const playCompleteSound = useCallback(() => {
     try {
       const el = completeSoundAudioRef.current ?? new Audio("/sounds/complete.mp3");
       completeSoundAudioRef.current = el;
+      el.muted = false;
       el.volume = 0.8;
       el.currentTime = 0;
       playAudioElement(el, "complete sound");
@@ -760,10 +763,11 @@ export default function Home() {
     }
   }, []);
 
+  /** タイマー開始時の autoplay 解除のみ（無音）。環境音開始後に遅延実行して干渉を避ける */
   const unlockCompleteSound = useCallback(() => {
     const el = completeSoundAudioRef.current;
     if (!el) return;
-    unlockAudioElement(el, "complete sound");
+    unlockAudioElement(el, "complete sound", 0.8);
   }, []);
   /** user_profiles.is_premium のミラー（未ログイン時は常に false とみなす） */
   const [isPremiumUser, setIsPremiumUser] = useState<boolean>(false);
@@ -1066,6 +1070,12 @@ export default function Home() {
         });
         return audio;
       });
+
+      if (noisePlayAllowedRef.current) {
+        audioRefs.current.forEach((a) => {
+          playAudioElement(a, "noise start");
+        });
+      }
     } catch (err) {
       console.warn("[audio] noise setup failed:", err);
       audioRefs.current = [];
@@ -1098,7 +1108,7 @@ export default function Home() {
         console.warn("[audio] noise play/pause error:", err);
       }
     });
-  }, [running, mode, noiseFilesKeyInfo.key]);
+  }, [running, mode]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1194,13 +1204,16 @@ export default function Home() {
   const handleMainButton = useCallback(() => {
     if (timerStatus === "idle") {
       hasPlayedCompleteSoundRef.current = false;
-      unlockCompleteSound();
       setTimerStatus("running");
       const presetConfig = getPresetConfig(focusPreset);
       captureTimerStart({
         focus_minutes: Math.round(presetConfig.focusSeconds / 60),
         preset: focusPreset,
       });
+      // 環境音の play 後に無音 unlock（完了音の「チン」を開始時に鳴らさない）
+      window.setTimeout(() => {
+        unlockCompleteSound();
+      }, 0);
     } else if (timerStatus === "running") {
       setTimerStatus("paused");
     } else {

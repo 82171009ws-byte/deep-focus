@@ -43,24 +43,38 @@ export function playAudioElement(
     });
 }
 
-/** タイマー開始時のユーザー操作で完了音の autoplay を解除 */
-export function unlockAudioElement(audio: HTMLAudioElement, label: string): void {
+const COMPLETE_SOUND_DEFAULT_VOLUME = 0.8;
+
+/**
+ * ユーザー操作時に autoplay 権限を解除するだけ（聞こえる音は出さない）。
+ * 環境音の Audio とは別要素で行い、muted + 極小音量で即 pause する。
+ */
+export function unlockAudioElement(
+  audio: HTMLAudioElement,
+  label: string,
+  targetVolume: number = COMPLETE_SOUND_DEFAULT_VOLUME
+): void {
+  const prevMuted = audio.muted;
   const prevVolume = audio.volume;
   try {
-    audio.volume = 0;
+    audio.muted = true;
+    audio.volume = 0.001;
     audio.currentTime = 0;
     void audio
       .play()
       .then(() => {
         audio.pause();
         audio.currentTime = 0;
-        audio.volume = prevVolume;
+        audio.muted = prevMuted;
+        audio.volume = targetVolume;
       })
       .catch((err) => {
+        audio.muted = prevMuted;
         audio.volume = prevVolume;
         console.warn(`[audio] ${label} unlock failed:`, err);
       });
   } catch (err) {
+    audio.muted = prevMuted;
     audio.volume = prevVolume;
     console.warn(`[audio] ${label} unlock error:`, err);
   }
