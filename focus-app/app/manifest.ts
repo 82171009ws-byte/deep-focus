@@ -14,19 +14,19 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: "/",
     icons: [
       {
-        src: "/icon.png?v=20260606",
+        src: "/deep-focus-icon-20260606.png?v=1",
         sizes: "192x192",
         type: "image/png",
         purpose: "any",
       },
       {
-        src: "/icon.png?v=20260606",
+        src: "/deep-focus-icon-20260606.png?v=1",
         sizes: "512x512",
         type: "image/png",
         purpose: "any",
       },
       {
-        src: "/apple-icon.png?v=20260606",
+        src: "/deep-focus-apple-icon-20260606.png?v=1",
         sizes: "180x180",
         type: "image/png",
         purpose: "any",

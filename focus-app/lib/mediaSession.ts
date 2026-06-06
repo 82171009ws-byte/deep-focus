@@ -1,4 +1,5 @@
-const ICON_CACHE_VERSION = "20260606";
+const APP_ICON_PATH = "/deep-focus-icon-20260606.png?v=1";
+const APP_APPLE_ICON_PATH = "/deep-focus-apple-icon-20260606.png?v=1";
 
 /** Media Session API（ロック画面・通知の artwork） */
 export function setupMediaSession(options: {
@@ -9,8 +10,8 @@ export function setupMediaSession(options: {
   if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
 
   const origin = window.location.origin;
-  const iconUrl = `${origin}/icon.png?v=${ICON_CACHE_VERSION}`;
-  const appleIconUrl = `${origin}/apple-icon.png?v=${ICON_CACHE_VERSION}`;
+  const iconUrl = `${origin}${APP_ICON_PATH}`;
+  const appleIconUrl = `${origin}${APP_APPLE_ICON_PATH}`;
   try {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: options.title,

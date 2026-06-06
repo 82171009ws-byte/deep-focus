@@ -38,8 +38,8 @@ export const metadata: Metadata = {
       "ポモドーロ＋軽量タスク管理＋集中音で没入できる集中アプリ",
   },
   icons: {
-    icon: "/icon.png?v=20260606",
-    apple: "/apple-icon.png?v=20260606",
+    icon: "/deep-focus-icon-20260606.png?v=1",
+    apple: "/deep-focus-apple-icon-20260606.png?v=1",
     shortcut: "/favicon.ico",
   },
 };
