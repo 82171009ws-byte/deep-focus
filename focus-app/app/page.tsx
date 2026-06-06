@@ -21,6 +21,7 @@ import { AppMenuDrawer } from "@/components/AppMenuDrawer";
 import { PremiumUpsellModal } from "@/components/PremiumUpsellModal";
 import { HomeSettingsFromQuery, type HomeSettingsHandlers } from "@/components/HomeSettingsFromQuery";
 import { createPremiumCheckoutSession } from "@/lib/premiumCheckoutClient";
+import { playAudioElement, setupMediaSession, unlockAudioElement } from "@/lib/mediaSession";
 import { captureSoundSelect, captureTimerStart } from "@/lib/posthog";
 import { usePremiumFeatureGate } from "@/hooks/usePremiumFeatureGate";
 
@@ -753,10 +754,16 @@ export default function Home() {
       completeSoundAudioRef.current = el;
       el.volume = 0.8;
       el.currentTime = 0;
-      void el.play().catch(() => {});
-    } catch {
-      /* 再生不可でもアプリは継続 */
+      playAudioElement(el, "complete sound");
+    } catch (err) {
+      console.warn("[audio] complete sound error:", err);
     }
+  }, []);
+
+  const unlockCompleteSound = useCallback(() => {
+    const el = completeSoundAudioRef.current;
+    if (!el) return;
+    unlockAudioElement(el, "complete sound");
   }, []);
   /** user_profiles.is_premium のミラー（未ログイン時は常に false とみなす） */
   const [isPremiumUser, setIsPremiumUser] = useState<boolean>(false);
@@ -802,6 +809,25 @@ export default function Home() {
     const id = window.setTimeout(() => setPremiumThemeRevertMessage(null), 4500);
     return () => window.clearTimeout(id);
   }, [premiumThemeRevertMessage]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setupMediaSession({ title: "Deep Focus", playbackState: "paused" });
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const title =
+      running && mode === "work"
+        ? "Deep Focus — 集中中"
+        : running
+          ? `Deep Focus — ${getModeLabel(mode)}`
+          : "Deep Focus";
+    setupMediaSession({
+      title,
+      playbackState: running ? "playing" : "paused",
+    });
+  }, [running, mode]);
 
   // タイマー刻み（既存ロジックを活かす）
   useEffect(() => {
@@ -1011,7 +1037,6 @@ export default function Home() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // いったん全部止めて作り直す（簡易実装）
     audioRefs.current.forEach((a) => {
       try {
         a.pause();
@@ -1030,32 +1055,50 @@ export default function Home() {
         audio.loop = true;
         audio.preload = "auto";
         audio.volume = perVolume;
-        // loop=true でも環境によっては途切れるため、ended で再開するフォールバック
         audio.addEventListener("ended", () => {
           if (!noisePlayAllowedRef.current) return;
           try {
             audio.currentTime = 0;
-            void audio.play();
-          } catch {
-            /* ignore */
+            playAudioElement(audio, `noise loop (${path})`);
+          } catch (err) {
+            console.warn("[audio] noise loop restart error:", path, err);
           }
         });
         return audio;
       });
-
-      const shouldPlay = running && mode === "work";
-      if (shouldPlay) {
-        audioRefs.current.forEach((a) => {
-          try {
-            a.currentTime = 0;
-            void a.play();
-          } catch {}
-        });
-      }
-    } catch {
+    } catch (err) {
+      console.warn("[audio] noise setup failed:", err);
       audioRefs.current = [];
     }
-  }, [noiseFilesKeyInfo.key, noiseFilesKeyInfo.files.length, running, mode, isPremiumUnlocked]);
+
+    return () => {
+      audioRefs.current.forEach((a) => {
+        try {
+          a.pause();
+        } catch {}
+      });
+      audioRefs.current = [];
+    };
+  }, [noiseFilesKeyInfo.key]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const shouldPlay = running && mode === "work";
+
+    audioRefs.current.forEach((a) => {
+      try {
+        if (shouldPlay) {
+          if (a.paused) {
+            playAudioElement(a, "noise resume");
+          }
+        } else {
+          a.pause();
+        }
+      } catch (err) {
+        console.warn("[audio] noise play/pause error:", err);
+      }
+    });
+  }, [running, mode, noiseFilesKeyInfo.key]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1151,6 +1194,7 @@ export default function Home() {
   const handleMainButton = useCallback(() => {
     if (timerStatus === "idle") {
       hasPlayedCompleteSoundRef.current = false;
+      unlockCompleteSound();
       setTimerStatus("running");
       const presetConfig = getPresetConfig(focusPreset);
       captureTimerStart({
@@ -1162,7 +1206,7 @@ export default function Home() {
     } else {
       setTimerStatus("running");
     }
-  }, [timerStatus, focusPreset]);
+  }, [timerStatus, focusPreset, unlockCompleteSound]);
 
   const handleResume = useCallback(() => {
     setTimerStatus("running");
@@ -1243,12 +1287,8 @@ export default function Home() {
   };
 
   const handlePremiumCardClick = useCallback(() => {
-    if (!authUserId) {
-      router.push("/login");
-      return;
-    }
     setIsPremiumUpsellOpen(true);
-  }, [authUserId, router]);
+  }, []);
 
   /** Stripe Checkout へ（サーバーがセッション作成、秘密鍵は API のみ） */
   const startPremiumCheckout = useCallback(async () => {

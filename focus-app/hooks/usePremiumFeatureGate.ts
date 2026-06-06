@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useCallback } from "react";
 
 export type PremiumFeatureGateParams = {
@@ -12,28 +11,22 @@ export type PremiumFeatureGateParams = {
 };
 
 /**
- * 未ログイン → /login、ログイン済み未課金 → onNeedPremium、課金済み → onAllowed。
- * アプリ全体で同一の分岐を使うための単一ソース。
+ * 未ログイン / 未課金 → onNeedPremium（説明モーダル）、課金済み → onAllowed。
+ * ログイン誘導はモーダル内の「Premiumを始める」押下時に行う。
  */
 export function usePremiumFeatureGate({
   authUserId,
   isPremiumUser,
   onNeedPremium,
 }: PremiumFeatureGateParams) {
-  const router = useRouter();
-
   return useCallback(
     (onAllowed: () => void) => {
-      if (!authUserId) {
-        router.push("/login");
-        return;
-      }
-      if (!isPremiumUser) {
+      if (!authUserId || !isPremiumUser) {
         onNeedPremium();
         return;
       }
       onAllowed();
     },
-    [authUserId, isPremiumUser, router, onNeedPremium]
+    [authUserId, isPremiumUser, onNeedPremium]
   );
 }
