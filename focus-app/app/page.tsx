@@ -42,6 +42,8 @@ type BackgroundThemeKey =
   | "forest"
   | "ocean"
   | "night"
+  | "white"
+  | "gray"
   | "mint"
   | "peach"
   | "lavender"
@@ -218,15 +220,121 @@ function normalizeNoiseId(rawId: string): string {
 
 interface BackgroundTheme {
   key: BackgroundThemeKey;
-  type: "immersive" | "pastel";
+  type: "immersive" | "pastel" | "solid";
   label: string;
+  description: string;
   backgroundImage: string;
   overlay: string;
   /** 無料テーマ以外は true（表示は常にするがタップ時に Premium 導線） */
   isPremium?: boolean;
-  // 将来拡張用: テーマ別の推奨ノイズ・発光演出などを追加しやすくしておく
+  /** 明るい背景向け UI（文字色を濃くする） */
+  surface?: "light" | "dark";
+  /** 無料テーマ一覧の表示順 */
+  sortOrder?: number;
   recommendedNoise?: string[];
   accentGlow?: string;
+}
+
+type SurfaceTokens = {
+  pageRoot: string;
+  chromeBtn: string;
+  chromeIcon: string;
+  taskLabel: string;
+  taskBox: string;
+  taskText: string;
+  taskChange: string;
+  timerDigits: string;
+  ringTrack: string;
+  ringProgress: string;
+  hookPrimary: string;
+  hookSecondary: string;
+  presetActive: string;
+  presetIdle: string;
+  pauseStopBtn: string;
+  mainBtnPrimary: string;
+  premiumCard: string;
+  premiumTitle: string;
+  premiumBody: string;
+  premiumCta: string;
+  completionBanner: string;
+  completionTitle: string;
+  completionHint: string;
+  fullscreenRoot: string;
+  fullscreenBtn: string;
+  fullscreenBtnSecondary: string;
+};
+
+function getSurfaceTokens(themeKey: BackgroundThemeKey): SurfaceTokens {
+  const light = getBackgroundTheme(themeKey).surface === "light";
+  if (light) {
+    return {
+      pageRoot: "text-slate-800",
+      chromeBtn:
+        "flex items-center justify-center w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-white/90 backdrop-blur-md border border-slate-200 text-slate-700 text-xl font-light leading-none hover:bg-white hover:text-slate-900 transition",
+      chromeIcon: "text-slate-700",
+      taskLabel: "text-slate-500",
+      taskBox:
+        "border-slate-200/90 bg-white/80 backdrop-blur-sm transition hover:border-slate-300 hover:bg-white/95",
+      taskText: "text-slate-800",
+      taskChange:
+        "border-slate-200 text-slate-600 underline decoration-slate-300 underline-offset-[3px] hover:text-slate-800",
+      timerDigits: "text-slate-900",
+      ringTrack: "rgba(15,23,42,0.12)",
+      ringProgress: "rgba(15,23,42,0.55)",
+      hookPrimary: "text-slate-600",
+      hookSecondary: "text-slate-500",
+      presetActive: "bg-slate-800/10 text-slate-900 ring-1 ring-slate-300",
+      presetIdle: "bg-white/80 text-slate-700 border border-slate-200/80 hover:bg-white",
+      pauseStopBtn: "border-slate-300 text-slate-700 bg-white/70 hover:bg-white/90",
+      mainBtnPrimary: "bg-slate-800 text-white hover:bg-slate-900",
+      premiumCard:
+        "border-amber-400/35 bg-white/90 backdrop-blur-sm transition hover:border-amber-400/50 hover:bg-white",
+      premiumTitle: "text-slate-800",
+      premiumBody: "text-slate-600",
+      premiumCta: "text-amber-700 underline decoration-amber-500/40 underline-offset-2",
+      completionBanner: "bg-slate-800/8",
+      completionTitle: "text-slate-800",
+      completionHint: "text-slate-600",
+      fullscreenRoot: "text-slate-900",
+      fullscreenBtn:
+        "flex items-center justify-center rounded-full bg-white/90 backdrop-blur-md border border-slate-200 shadow-sm px-7 py-3 text-sm font-medium text-slate-800 hover:bg-white",
+      fullscreenBtnSecondary:
+        "flex items-center justify-center rounded-full bg-white/70 backdrop-blur-md border border-slate-200 px-7 py-3 text-sm font-medium text-slate-700 hover:bg-white/90",
+    };
+  }
+  return {
+    pageRoot: "text-white",
+    chromeBtn:
+      "flex items-center justify-center w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white/90 text-xl font-light leading-none hover:bg-white/20 hover:text-white transition",
+    chromeIcon: "text-white/90",
+    taskLabel: "text-white/38",
+    taskBox: "border-white/12 bg-black/25 backdrop-blur-sm transition hover:border-white/18 hover:bg-black/30",
+    taskText: "text-white/88",
+    taskChange:
+      "border-white/12 text-white/70 underline decoration-white/25 underline-offset-[3px] hover:text-white/85",
+    timerDigits: "text-white/95",
+    ringTrack: "rgba(255,255,255,0.14)",
+    ringProgress: "rgba(255,255,255,0.52)",
+    hookPrimary: "text-white/52",
+    hookSecondary: "text-white/38",
+    presetActive: "bg-white/22 text-white ring-1 ring-white/35",
+    presetIdle: "bg-white/10 text-white/80 hover:bg-white/16",
+    pauseStopBtn: "border-white/40 text-white/90 bg-white/5 hover:bg-white/10",
+    mainBtnPrimary: "bg-white/90 text-gray-900 hover:bg-white",
+    premiumCard:
+      "border-amber-400/20 bg-black/25 backdrop-blur-sm transition hover:border-amber-300/30 hover:bg-black/35",
+    premiumTitle: "text-white/88",
+    premiumBody: "text-white/50",
+    premiumCta: "text-amber-200/90 underline decoration-amber-300/40 underline-offset-2",
+    completionBanner: "bg-white/10",
+    completionTitle: "text-white/95",
+    completionHint: "text-white/60",
+    fullscreenRoot: "text-white",
+    fullscreenBtn:
+      "flex items-center justify-center rounded-full bg-white/10 backdrop-blur-md border border-white/20 shadow-sm px-7 py-3 text-sm font-medium text-white/90 hover:bg-white/15",
+    fullscreenBtnSecondary:
+      "flex items-center justify-center rounded-full bg-white/10 backdrop-blur-md border border-white/20 px-7 py-3 text-sm font-medium text-white/90 hover:bg-white/15",
+  };
 }
 
 const BACKGROUND_THEMES: BackgroundTheme[] = [
@@ -234,6 +342,8 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
     key: "sea",
     type: "immersive",
     label: "海",
+    description: "青く静かな海",
+    sortOrder: 1,
     backgroundImage:
       "radial-gradient(circle at 30% 10%, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0) 35%), linear-gradient(160deg, #031b34 0%, #046a84 45%, #0a2f5a 100%)",
     overlay: "rgba(0,0,0,0.28)",
@@ -242,6 +352,7 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
     key: "desert",
     type: "immersive",
     label: "砂漠",
+    description: "乾いた夕暮れ",
     backgroundImage:
       "radial-gradient(circle at 25% 15%, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0) 40%), linear-gradient(160deg, #2a1406 0%, #b36b2a 45%, #f2c27c 100%)",
     overlay: "rgba(0,0,0,0.32)",
@@ -251,6 +362,7 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
     key: "snow",
     type: "immersive",
     label: "雪山",
+    description: "澄んだ雪景色",
     backgroundImage:
       "radial-gradient(circle at 30% 10%, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 45%), linear-gradient(160deg, #0b1b2a 0%, #3b6a8d 45%, #d7e8f4 100%)",
     overlay: "rgba(0,0,0,0.28)",
@@ -260,6 +372,7 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
     key: "forest",
     type: "immersive",
     label: "Forest",
+    description: "深く穏やかな森",
     backgroundImage:
       "radial-gradient(circle at 18% 10%, rgba(205,255,222,0.18) 0%, rgba(205,255,222,0) 40%), radial-gradient(circle at 84% 78%, rgba(68,160,112,0.16) 0%, rgba(68,160,112,0) 45%), linear-gradient(158deg, #061710 0%, #123828 48%, #1f4d33 100%)",
     overlay: "rgba(0,0,0,0.36)",
@@ -271,6 +384,7 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
     key: "ocean",
     type: "immersive",
     label: "Ocean",
+    description: "透明感のある海辺",
     backgroundImage:
       "radial-gradient(circle at 22% 12%, rgba(214,240,255,0.20) 0%, rgba(214,240,255,0) 42%), radial-gradient(circle at 78% 80%, rgba(69,166,214,0.16) 0%, rgba(69,166,214,0) 48%), linear-gradient(162deg, #071a2a 0%, #0f3c67 50%, #1f6a8f 100%)",
     overlay: "rgba(0,0,0,0.32)",
@@ -282,6 +396,8 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
     key: "night",
     type: "immersive",
     label: "Night",
+    description: "洗練された夜の静けさ",
+    sortOrder: 2,
     backgroundImage:
       "radial-gradient(circle at 74% 18%, rgba(190,210,255,0.14) 0%, rgba(190,210,255,0) 36%), radial-gradient(circle at 14% 72%, rgba(114,133,255,0.14) 0%, rgba(114,133,255,0) 44%), linear-gradient(160deg, #03060f 0%, #0a1730 54%, #020713 100%)",
     overlay: "rgba(0,0,0,0.38)",
@@ -289,9 +405,30 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
     accentGlow: "rgba(130, 154, 255, 0.18)",
   },
   {
+    key: "white",
+    type: "solid",
+    label: "ホワイト",
+    description: "白く静かな作業空間",
+    sortOrder: 3,
+    surface: "light",
+    backgroundImage: "linear-gradient(180deg, #ffffff 0%, #f5f5f7 48%, #eceef2 100%)",
+    overlay: "rgba(255,255,255,0.02)",
+  },
+  {
+    key: "gray",
+    type: "solid",
+    label: "グレー",
+    description: "落ち着いたニュートラルグレー",
+    sortOrder: 4,
+    surface: "dark",
+    backgroundImage: "linear-gradient(180deg, #6b7280 0%, #4b5563 52%, #374151 100%)",
+    overlay: "rgba(0,0,0,0.18)",
+  },
+  {
     key: "mint",
     type: "pastel",
     label: "ミント",
+    description: "明るいミント",
     backgroundImage:
       "radial-gradient(circle at 25% 15%, rgba(255,255,255,0.65) 0%, rgba(255,255,255,0) 45%), linear-gradient(155deg, #b7f4e3 0%, #7fe8d8 45%, #6bd7ff 100%)",
     overlay: "rgba(0,0,0,0.18)",
@@ -301,6 +438,7 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
     key: "peach",
     type: "pastel",
     label: "ピーチ",
+    description: "やわらかいピーチ",
     backgroundImage:
       "radial-gradient(circle at 25% 15%, rgba(255,255,255,0.65) 0%, rgba(255,255,255,0) 45%), linear-gradient(155deg, #ffd1b8 0%, #ffb1c8 45%, #ffc6a5 100%)",
     overlay: "rgba(0,0,0,0.20)",
@@ -310,6 +448,7 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
     key: "lavender",
     type: "pastel",
     label: "ラベンダー",
+    description: "淡いラベンダー",
     backgroundImage:
       "radial-gradient(circle at 30% 12%, rgba(255,255,255,0.65) 0%, rgba(255,255,255,0) 45%), linear-gradient(155deg, #e6d7ff 0%, #cbb8ff 45%, #a9b8ff 100%)",
     overlay: "rgba(0,0,0,0.22)",
@@ -319,6 +458,7 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
     key: "sky",
     type: "pastel",
     label: "スカイ",
+    description: "軽やかなスカイ",
     backgroundImage:
       "radial-gradient(circle at 30% 12%, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0) 45%), linear-gradient(155deg, #b9e7ff 0%, #a9c7ff 45%, #d7f3ff 100%)",
     overlay: "rgba(0,0,0,0.16)",
@@ -480,6 +620,8 @@ function loadBackgroundTheme(): BackgroundThemeKey {
     raw === "forest" ||
     raw === "ocean" ||
     raw === "night" ||
+    raw === "white" ||
+    raw === "gray" ||
     raw === "mint" ||
     raw === "peach" ||
     raw === "lavender" ||
@@ -495,12 +637,16 @@ function TimerProgressRing({
   className,
   strokeWidth = 3.5,
   radius = 47,
+  trackStroke = "rgba(255,255,255,0.14)",
+  progressStroke = "rgba(255,255,255,0.52)",
 }: {
   elapsedRatio: number;
   className?: string;
   strokeWidth?: number;
   /** viewBox 0..100 上の半径（50 に近いほど外周） */
   radius?: number;
+  trackStroke?: string;
+  progressStroke?: string;
 }) {
   const r = radius;
   const circumference = 2 * Math.PI * r;
@@ -519,14 +665,14 @@ function TimerProgressRing({
           cx="50"
           cy="50"
           r={r}
-          stroke="rgba(255,255,255,0.14)"
+          stroke={trackStroke}
           strokeWidth={strokeWidth}
         />
         <circle
           cx="50"
           cy="50"
           r={r}
-          stroke="rgba(255,255,255,0.52)"
+          stroke={progressStroke}
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           strokeDasharray={circumference}
@@ -1384,6 +1530,7 @@ export default function Home() {
   const elapsedRatio = seconds <= 0 ? 0 : 1 - Math.min(1, Math.max(0, seconds / modeSeconds));
 
   const noiseTheme = getNoiseTheme(backgroundTheme);
+  const surface = useMemo(() => getSurfaceTokens(backgroundTheme), [backgroundTheme]);
 
   const mainButtonLabel =
     isIdle
@@ -1437,11 +1584,22 @@ export default function Home() {
         </div>
 
         {(() => {
-          const immersiveThemes = BACKGROUND_THEMES.filter((t) => t.type === "immersive");
-          const pastelThemes = BACKGROUND_THEMES.filter((t) => t.type === "pastel");
+          const freeThemes = BACKGROUND_THEMES.filter((t) => !t.isPremium).sort(
+            (a, b) => (a.sortOrder ?? 99) - (b.sortOrder ?? 99)
+          );
+          const premiumImmersiveThemes = BACKGROUND_THEMES.filter(
+            (t) => t.isPremium && t.type === "immersive"
+          );
+          const premiumPastelThemes = BACKGROUND_THEMES.filter((t) => t.isPremium && t.type === "pastel");
           const renderThemeCard = (t: BackgroundTheme) => {
             const active = t.key === backgroundTheme;
             const isPremiumTheme = Boolean(t.isPremium);
+            const cardIsLight = t.surface === "light";
+            const cardTextClass = cardIsLight ? "text-slate-800" : "text-white";
+            const cardDescClass = cardIsLight ? "text-slate-600" : "text-white/65";
+            const activeBorderClass = cardIsLight
+              ? "border-slate-400/60 ring-1 ring-slate-300"
+              : "border-white/60 ring-1 ring-white/30";
             return (
               <button
                 key={t.key}
@@ -1455,7 +1613,7 @@ export default function Home() {
                 }}
                 className={`relative overflow-hidden rounded-2xl border text-left transition ${
                   active
-                    ? "border-white/60 ring-1 ring-white/30"
+                    ? activeBorderClass
                     : isPremiumTheme
                       ? "border-amber-400/25 hover:border-amber-300/35"
                       : "border-white/10 hover:border-white/25"
@@ -1469,37 +1627,19 @@ export default function Home() {
                 <div className="absolute inset-0" style={{ background: t.overlay }} aria-hidden />
                 <div className="relative p-3">
                   <div className="flex items-start justify-between gap-1">
-                    <span className="text-sm font-semibold leading-tight">{t.label}</span>
+                    <span className={`text-sm font-semibold leading-tight ${cardTextClass}`}>{t.label}</span>
                     <span className="flex shrink-0 flex-col items-end gap-0.5">
                       {isPremiumTheme && (
                         <span className="text-[9px] font-medium tracking-wide text-amber-200/95">
                           🔒 Premium
                         </span>
                       )}
-                      {active && <span className="text-sm leading-none">✓</span>}
+                      {active && (
+                        <span className={`text-sm leading-none ${cardTextClass}`}>✓</span>
+                      )}
                     </span>
                   </div>
-                  <div className="mt-1 text-[11px] text-white/65">
-                    {t.key === "sea"
-                      ? "青く静かな海"
-                      : t.key === "desert"
-                        ? "乾いた夕暮れ"
-                        : t.key === "snow"
-                          ? "澄んだ雪景色"
-                          : t.key === "forest"
-                            ? "深く穏やかな森"
-                            : t.key === "ocean"
-                              ? "透明感のある海辺"
-                          : t.key === "night"
-                            ? "洗練された夜の静けさ"
-                            : t.key === "mint"
-                              ? "明るいミント"
-                              : t.key === "peach"
-                                ? "やわらかいピーチ"
-                                : t.key === "lavender"
-                                  ? "淡いラベンダー"
-                                  : "軽やかなスカイ"}
-                  </div>
+                  <div className={`mt-1 text-[11px] ${cardDescClass}`}>{t.description}</div>
                 </div>
               </button>
             );
@@ -1508,12 +1648,18 @@ export default function Home() {
           return (
             <div className="space-y-5">
               <div>
-                <div className="mb-2 text-xs font-semibold text-white/70">没入テーマ</div>
-                <div className="grid grid-cols-2 gap-3">{immersiveThemes.map(renderThemeCard)}</div>
+                <div className="mb-2 text-xs font-semibold text-white/70">無料テーマ</div>
+                <div className="grid grid-cols-2 gap-3">{freeThemes.map(renderThemeCard)}</div>
               </div>
               <div>
-                <div className="mb-2 text-xs font-semibold text-white/70">ポップテーマ</div>
-                <div className="grid grid-cols-2 gap-3">{pastelThemes.map(renderThemeCard)}</div>
+                <div className="mb-2 text-xs font-semibold text-white/70">Premium 没入テーマ</div>
+                <div className="grid grid-cols-2 gap-3">
+                  {premiumImmersiveThemes.map(renderThemeCard)}
+                </div>
+              </div>
+              <div>
+                <div className="mb-2 text-xs font-semibold text-white/70">Premium ポップテーマ</div>
+                <div className="grid grid-cols-2 gap-3">{premiumPastelThemes.map(renderThemeCard)}</div>
               </div>
             </div>
           );
@@ -1530,8 +1676,7 @@ export default function Home() {
     </div>
   );
 
-  const chromeButtonClass =
-    "flex items-center justify-center w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white/90 text-xl font-light leading-none hover:bg-white/20 hover:text-white transition";
+  const chromeButtonClass = surface.chromeBtn;
 
   // 通常表示（タイマー中心・統計・タスク編集はメニュー先）
   const normalView = (
@@ -1568,7 +1713,7 @@ export default function Home() {
               aria-haspopup="menu"
             >
               <svg
-                className="h-[22px] w-[22px] text-white/90"
+                className={`h-[22px] w-[22px] ${surface.chromeIcon}`}
                 viewBox="0 0 24 24"
                 fill="currentColor"
                 aria-hidden
@@ -1621,10 +1766,10 @@ export default function Home() {
           </div>
         </>
       )}
-      <div className="relative flex min-h-0 flex-1 flex-col px-5 pb-[max(20px,env(safe-area-inset-bottom))] text-white sm:px-6">
+      <div className={`relative flex min-h-0 flex-1 flex-col px-5 pb-[max(20px,env(safe-area-inset-bottom))] sm:px-6 ${surface.pageRoot}`}>
         {/* 上部: タスク（固定高さ帯・主ブロックの上に補助として配置） */}
         <div className="relative mx-auto w-full max-w-sm shrink-0 space-y-1.5 pt-[calc(env(safe-area-inset-top)+72px)] pb-2 sm:max-w-md sm:pb-3">
-          <p className="text-[10px] font-medium tracking-[0.16em] text-white/38">現在のタスク</p>
+          <p className={`text-[10px] font-medium tracking-[0.16em] ${surface.taskLabel}`}>現在のタスク</p>
           <div className={isTaskQuickPickerOpen ? "relative z-[60]" : "relative"}>
             {isTaskQuickPickerOpen ? (
               <div
@@ -1633,7 +1778,7 @@ export default function Home() {
                 onClick={() => setIsTaskQuickPickerOpen(false)}
               />
             ) : null}
-            <div className="flex w-full min-h-[44px] overflow-hidden rounded-2xl border border-white/12 bg-black/25 backdrop-blur-sm transition hover:border-white/18 hover:bg-black/30">
+            <div className={`flex w-full min-h-[44px] overflow-hidden rounded-2xl border ${surface.taskBox}`}>
               <button
                 type="button"
                 onClick={toggleTaskQuickPicker}
@@ -1646,7 +1791,7 @@ export default function Home() {
                       ? `「${selectedTask.title}」のタスクを変更`
                       : "タスクを選択"
                 }
-                className="flex min-h-[44px] min-w-0 flex-1 items-center px-3 py-2.5 text-left text-[15px] font-normal leading-snug text-white/88 transition hover:bg-white/[0.06] sm:text-sm"
+                className={`flex min-h-[44px] min-w-0 flex-1 items-center px-3 py-2.5 text-left text-[15px] font-normal leading-snug transition hover:bg-black/[0.04] sm:text-sm ${surface.taskText}`}
               >
                 <span className="min-w-0 flex-1 truncate">
                   {authUserId && tasksRemoteLoading
@@ -1659,7 +1804,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={openTaskQuickPicker}
-                className="shrink-0 border-l border-white/12 px-3 py-2.5 text-[11px] font-medium tabular-nums text-white/70 underline decoration-white/25 underline-offset-[3px] transition hover:bg-white/[0.06] hover:text-white/85"
+                className={`shrink-0 border-l px-3 py-2.5 text-[11px] font-medium tabular-nums underline underline-offset-[3px] transition hover:bg-black/[0.04] ${surface.taskChange}`}
               >
                 変更
               </button>
@@ -1756,36 +1901,38 @@ export default function Home() {
                 elapsedRatio={elapsedRatio}
                 strokeWidth={3.5}
                 radius={47}
+                trackStroke={surface.ringTrack}
+                progressStroke={surface.ringProgress}
                 className="pointer-events-none absolute inset-0 h-full w-full"
               />
               <div className="relative z-10 flex max-w-[72%] items-center justify-center px-5 py-4 text-center sm:max-w-[68%] sm:px-6 sm:py-5">
-                <span className="text-[clamp(2.35rem,9.25vw,3.85rem)] font-extralight tabular-nums tracking-[0.08em] text-white/95 sm:text-[clamp(2.4rem,8.5vw,3.75rem)]">
+                <span className={`text-[clamp(2.35rem,9.25vw,3.85rem)] font-extralight tabular-nums tracking-[0.08em] sm:text-[clamp(2.4rem,8.5vw,3.75rem)] ${surface.timerDigits}`}>
                   {String(minutes).padStart(2, "0")}:{String(secs).padStart(2, "0")}
                 </span>
               </div>
             </div>
 
             {justCompletedWork && (
-              <div className="max-w-sm rounded-full bg-white/10 px-4 py-2 text-center backdrop-blur-sm transition-opacity duration-500 animate-pulse">
-                <div className="text-xs font-medium text-white/95">集中、完了！</div>
+              <div className={`max-w-sm rounded-full px-4 py-2 text-center backdrop-blur-sm transition-opacity duration-500 animate-pulse ${surface.completionBanner}`}>
+                <div className={`text-xs font-medium ${surface.completionTitle}`}>集中、完了！</div>
                 {nextActionHint ? (
-                  <div className="mt-1 text-[11px] text-white/60">{nextActionHint}</div>
+                  <div className={`mt-1 text-[11px] ${surface.completionHint}`}>{nextActionHint}</div>
                 ) : null}
               </div>
             )}
 
             {justCompletedBreak && (
-              <div className="max-w-sm rounded-full bg-white/10 px-4 py-2 text-center text-xs text-white/70 backdrop-blur-sm">
+              <div className={`max-w-sm rounded-full px-4 py-2 text-center text-xs backdrop-blur-sm ${surface.completionBanner} ${surface.completionHint}`}>
                 {nextActionHint || "作業に戻ります"}
               </div>
             )}
           </div>
 
           <div className="w-full max-w-sm space-y-1 text-center sm:max-w-md">
-            <p className="text-[11px] leading-relaxed text-white/52">
+            <p className={`text-[11px] leading-relaxed ${surface.hookPrimary}`}>
               25分がしんどい日でも、まず10分から。
             </p>
-            <p className="text-[10px] leading-relaxed text-white/38">
+            <p className={`text-[10px] leading-relaxed ${surface.hookSecondary}`}>
               仕事終わりや資格勉強前でも、10分だけなら始めやすい。
             </p>
           </div>
@@ -1805,7 +1952,7 @@ export default function Home() {
                   disabled={!isIdle}
                   onClick={() => handleSelectFocusPreset(presetKey)}
                   className={`min-w-0 flex-1 rounded-2xl py-3.5 text-sm font-medium tabular-nums transition ${
-                    active ? "bg-white/22 text-white ring-1 ring-white/35" : "bg-white/10 text-white/80 hover:bg-white/16"
+                    active ? surface.presetActive : surface.presetIdle
                   }`}
                 >
                   {Math.round(preset.focusSeconds / 60)}分
@@ -1820,17 +1967,14 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={handleResume}
-                  className={mainButtonClass + " bg-white/90 text-gray-900 hover:bg-white"}
+                  className={mainButtonClass + " " + surface.mainBtnPrimary}
                 >
                   続ける
                 </button>
                 <button
                   type="button"
                   onClick={handleRequestStop}
-                  className={
-                    mainButtonClass +
-                    " border border-white/40 text-white/90 bg-white/5 hover:bg-white/10"
-                  }
+                  className={mainButtonClass + " border " + surface.pauseStopBtn}
                 >
                   停止する
                 </button>
@@ -1839,7 +1983,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={handleMainButton}
-                className={`${mainButtonClass} bg-white/90 text-gray-900 transition hover:bg-white`}
+                className={`${mainButtonClass} transition ${surface.mainBtnPrimary}`}
               >
                 {mainButtonLabel}
               </button>
@@ -1850,13 +1994,13 @@ export default function Home() {
             <button
               type="button"
               onClick={handlePremiumCardClick}
-              className="w-full max-w-sm rounded-2xl border border-amber-400/20 bg-black/25 px-4 py-3 text-left backdrop-blur-sm transition hover:border-amber-300/30 hover:bg-black/35 sm:max-w-md"
+              className={`w-full max-w-sm rounded-2xl border px-4 py-3 text-left sm:max-w-md ${surface.premiumCard}`}
             >
-              <p className="text-[13px] font-medium text-white/88">もっと集中環境を整える</p>
-              <p className="mt-1 text-[11px] leading-relaxed text-white/50">
+              <p className={`text-[13px] font-medium ${surface.premiumTitle}`}>もっと集中環境を整える</p>
+              <p className={`mt-1 text-[11px] leading-relaxed ${surface.premiumBody}`}>
                 Premiumでは、自然音の2つ同時再生・全テーマ・詳細レポートが使えます。
               </p>
-              <span className="mt-2 inline-block text-[11px] font-medium text-amber-200/90 underline decoration-amber-300/40 underline-offset-2">
+              <span className={`mt-2 inline-block text-[11px] font-medium ${surface.premiumCta}`}>
                 Premiumを見る
               </span>
             </button>
@@ -1870,7 +2014,7 @@ export default function Home() {
   const fullscreenUI = (
     <div
       ref={fullscreenRef}
-      className="fixed inset-0 z-50 flex flex-col text-white"
+      className={`fixed inset-0 z-50 flex flex-col ${surface.fullscreenRoot}`}
       style={{ display: isFullscreenMode ? "flex" : "none" }}
       onPointerDown={() => showFullscreenControlsTemporarily(2800)}
     >
@@ -1899,10 +2043,12 @@ export default function Home() {
             elapsedRatio={elapsedRatio}
             strokeWidth={4}
             radius={47}
+            trackStroke={surface.ringTrack}
+            progressStroke={surface.ringProgress}
             className="pointer-events-none absolute inset-0 h-full w-full"
           />
           <div className="relative z-10 flex max-w-[70%] items-center justify-center px-6 py-6 text-center sm:px-8 sm:py-8">
-            <div className="text-[clamp(3rem,10.5vw,5.25rem)] font-light tabular-nums tracking-[0.06em] text-white/95">
+            <div className={`text-[clamp(3rem,10.5vw,5.25rem)] font-light tabular-nums tracking-[0.06em] ${surface.timerDigits}`}>
               {String(minutes).padStart(2, "0")}:{String(secs).padStart(2, "0")}
             </div>
           </div>
@@ -1923,7 +2069,7 @@ export default function Home() {
               handleMainButton();
               showFullscreenControlsTemporarily(1800);
             }}
-            className="flex items-center justify-center rounded-full bg-white/10 backdrop-blur-md border border-white/20 shadow-sm px-7 py-3 text-sm font-medium text-white/90 hover:bg-white/15"
+            className={surface.fullscreenBtn}
           >
             {timerStatus === "idle"
               ? "再生"
@@ -1938,7 +2084,7 @@ export default function Home() {
               handleRequestStop();
               showFullscreenControlsTemporarily(1800);
             }}
-            className="flex items-center justify-center rounded-full bg-white/10 backdrop-blur-md border border-white/20 shadow-sm px-7 py-3 text-sm font-medium text-white/90 hover:bg-white/15"
+            className={surface.fullscreenBtnSecondary}
           >
             停止
           </button>
