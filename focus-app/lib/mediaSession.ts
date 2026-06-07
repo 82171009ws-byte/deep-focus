@@ -5,6 +5,7 @@ const APP_APPLE_ICON_PATH = "/deep-focus-apple-icon-20260606.png?v=1";
 export function setupMediaSession(options: {
   title: string;
   artist?: string;
+  album?: string;
   playbackState?: MediaSessionPlaybackState;
 }): void {
   if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
@@ -15,7 +16,8 @@ export function setupMediaSession(options: {
   try {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: options.title,
-      artist: options.artist ?? "Deep Focus",
+      artist: options.artist ?? "Focus Session",
+      album: options.album ?? "Pomodoro Timer",
       artwork: [
         { src: iconUrl, sizes: "512x512", type: "image/png" },
         { src: iconUrl, sizes: "192x192", type: "image/png" },

@@ -962,22 +962,13 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    setupMediaSession({ title: "Deep Focus", playbackState: "paused" });
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const title =
-      running && mode === "work"
-        ? "Deep Focus — 集中中"
-        : running
-          ? `Deep Focus — ${getModeLabel(mode)}`
-          : "Deep Focus";
     setupMediaSession({
-      title,
+      title: "Deep Focus",
+      artist: "Focus Session",
+      album: "Pomodoro Timer",
       playbackState: running ? "playing" : "paused",
     });
-  }, [running, mode]);
+  }, [running]);
 
   // タイマー刻み（既存ロジックを活かす）
   useEffect(() => {
