@@ -341,9 +341,9 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
   {
     key: "sea",
     type: "immersive",
-    label: "海",
+    label: "Sea（海）",
     description: "青く静かな海",
-    sortOrder: 1,
+    sortOrder: 3,
     backgroundImage:
       "radial-gradient(circle at 30% 10%, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0) 35%), linear-gradient(160deg, #031b34 0%, #046a84 45%, #0a2f5a 100%)",
     overlay: "rgba(0,0,0,0.28)",
@@ -351,7 +351,7 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
   {
     key: "desert",
     type: "immersive",
-    label: "砂漠",
+    label: "Desert（砂漠）",
     description: "乾いた夕暮れ",
     backgroundImage:
       "radial-gradient(circle at 25% 15%, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0) 40%), linear-gradient(160deg, #2a1406 0%, #b36b2a 45%, #f2c27c 100%)",
@@ -361,7 +361,7 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
   {
     key: "snow",
     type: "immersive",
-    label: "雪山",
+    label: "Snow Mountain（雪山）",
     description: "澄んだ雪景色",
     backgroundImage:
       "radial-gradient(circle at 30% 10%, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 45%), linear-gradient(160deg, #0b1b2a 0%, #3b6a8d 45%, #d7e8f4 100%)",
@@ -371,7 +371,7 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
   {
     key: "forest",
     type: "immersive",
-    label: "Forest",
+    label: "Forest（森）",
     description: "深く穏やかな森",
     backgroundImage:
       "radial-gradient(circle at 18% 10%, rgba(205,255,222,0.18) 0%, rgba(205,255,222,0) 40%), radial-gradient(circle at 84% 78%, rgba(68,160,112,0.16) 0%, rgba(68,160,112,0) 45%), linear-gradient(158deg, #061710 0%, #123828 48%, #1f4d33 100%)",
@@ -383,7 +383,7 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
   {
     key: "ocean",
     type: "immersive",
-    label: "Ocean",
+    label: "Ocean（海辺）",
     description: "透明感のある海辺",
     backgroundImage:
       "radial-gradient(circle at 22% 12%, rgba(214,240,255,0.20) 0%, rgba(214,240,255,0) 42%), radial-gradient(circle at 78% 80%, rgba(69,166,214,0.16) 0%, rgba(69,166,214,0) 48%), linear-gradient(162deg, #071a2a 0%, #0f3c67 50%, #1f6a8f 100%)",
@@ -395,9 +395,9 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
   {
     key: "night",
     type: "immersive",
-    label: "Night",
+    label: "Night（夜）",
     description: "洗練された夜の静けさ",
-    sortOrder: 2,
+    sortOrder: 4,
     backgroundImage:
       "radial-gradient(circle at 74% 18%, rgba(190,210,255,0.14) 0%, rgba(190,210,255,0) 36%), radial-gradient(circle at 14% 72%, rgba(114,133,255,0.14) 0%, rgba(114,133,255,0) 44%), linear-gradient(160deg, #03060f 0%, #0a1730 54%, #020713 100%)",
     overlay: "rgba(0,0,0,0.38)",
@@ -407,9 +407,9 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
   {
     key: "white",
     type: "solid",
-    label: "ホワイト",
+    label: "White（ホワイト）",
     description: "白く静かな作業空間",
-    sortOrder: 3,
+    sortOrder: 1,
     surface: "light",
     backgroundImage: "linear-gradient(180deg, #ffffff 0%, #f5f5f7 48%, #eceef2 100%)",
     overlay: "rgba(255,255,255,0.02)",
@@ -417,9 +417,9 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
   {
     key: "gray",
     type: "solid",
-    label: "グレー",
+    label: "Gray（グレー）",
     description: "落ち着いたニュートラルグレー",
-    sortOrder: 4,
+    sortOrder: 2,
     surface: "dark",
     backgroundImage: "linear-gradient(180deg, #6b7280 0%, #4b5563 52%, #374151 100%)",
     overlay: "rgba(0,0,0,0.18)",
@@ -427,7 +427,7 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
   {
     key: "mint",
     type: "pastel",
-    label: "ミント",
+    label: "Mint（ミント）",
     description: "明るいミント",
     backgroundImage:
       "radial-gradient(circle at 25% 15%, rgba(255,255,255,0.65) 0%, rgba(255,255,255,0) 45%), linear-gradient(155deg, #b7f4e3 0%, #7fe8d8 45%, #6bd7ff 100%)",
@@ -437,7 +437,7 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
   {
     key: "peach",
     type: "pastel",
-    label: "ピーチ",
+    label: "Peach（ピーチ）",
     description: "やわらかいピーチ",
     backgroundImage:
       "radial-gradient(circle at 25% 15%, rgba(255,255,255,0.65) 0%, rgba(255,255,255,0) 45%), linear-gradient(155deg, #ffd1b8 0%, #ffb1c8 45%, #ffc6a5 100%)",
@@ -447,7 +447,7 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
   {
     key: "lavender",
     type: "pastel",
-    label: "ラベンダー",
+    label: "Lavender（ラベンダー）",
     description: "淡いラベンダー",
     backgroundImage:
       "radial-gradient(circle at 30% 12%, rgba(255,255,255,0.65) 0%, rgba(255,255,255,0) 45%), linear-gradient(155deg, #e6d7ff 0%, #cbb8ff 45%, #a9b8ff 100%)",
@@ -457,7 +457,7 @@ const BACKGROUND_THEMES: BackgroundTheme[] = [
   {
     key: "sky",
     type: "pastel",
-    label: "スカイ",
+    label: "Sky（スカイ）",
     description: "軽やかなスカイ",
     backgroundImage:
       "radial-gradient(circle at 30% 12%, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0) 45%), linear-gradient(155deg, #b9e7ff 0%, #a9c7ff 45%, #d7f3ff 100%)",
@@ -1595,11 +1595,19 @@ export default function Home() {
             const active = t.key === backgroundTheme;
             const isPremiumTheme = Boolean(t.isPremium);
             const cardIsLight = t.surface === "light";
-            const cardTextClass = cardIsLight ? "text-slate-800" : "text-white";
-            const cardDescClass = cardIsLight ? "text-slate-600" : "text-white/65";
+            const cardTextClass = cardIsLight ? "text-slate-900" : "text-white";
+            const cardDescClass = cardIsLight ? "text-slate-600" : "text-white/70";
+            const cardFooterClass = cardIsLight
+              ? "border-t border-slate-200/90 bg-[#f8f9fb]"
+              : "border-t border-white/10 bg-gray-950/80";
             const activeBorderClass = cardIsLight
-              ? "border-slate-400/60 ring-1 ring-slate-300"
+              ? "border-slate-400 ring-1 ring-slate-400/70"
               : "border-white/60 ring-1 ring-white/30";
+            const inactiveBorderClass = cardIsLight
+              ? "border-slate-200/90 hover:border-slate-300"
+              : isPremiumTheme
+                ? "border-amber-400/25 hover:border-amber-300/35"
+                : "border-white/10 hover:border-white/25";
             return (
               <button
                 key={t.key}
@@ -1611,35 +1619,47 @@ export default function Home() {
                   }
                   setBackgroundTheme(t.key);
                 }}
-                className={`relative overflow-hidden rounded-2xl border text-left transition ${
-                  active
-                    ? activeBorderClass
-                    : isPremiumTheme
-                      ? "border-amber-400/25 hover:border-amber-300/35"
-                      : "border-white/10 hover:border-white/25"
+                className={`relative flex flex-col overflow-hidden rounded-2xl border text-left transition ${
+                  active ? activeBorderClass : inactiveBorderClass
                 }`}
               >
-                <div
-                  className="h-24 w-full"
-                  style={{ backgroundImage: t.backgroundImage }}
-                  aria-hidden
-                />
-                <div className="absolute inset-0" style={{ background: t.overlay }} aria-hidden />
-                <div className="relative p-3">
+                <div className="relative h-24 w-full shrink-0">
+                  <div
+                    className="absolute inset-0 bg-cover bg-center"
+                    style={{ backgroundImage: t.backgroundImage }}
+                    aria-hidden
+                  />
+                  <div
+                    className="absolute inset-0"
+                    style={{ background: t.overlay }}
+                    aria-hidden
+                  />
+                </div>
+                <div className={`relative p-3 ${cardFooterClass}`}>
                   <div className="flex items-start justify-between gap-1">
                     <span className={`text-sm font-semibold leading-tight ${cardTextClass}`}>{t.label}</span>
                     <span className="flex shrink-0 flex-col items-end gap-0.5">
                       {isPremiumTheme && (
-                        <span className="text-[9px] font-medium tracking-wide text-amber-200/95">
+                        <span
+                          className={`text-[9px] font-medium tracking-wide ${
+                            cardIsLight ? "text-amber-700" : "text-amber-200/95"
+                          }`}
+                        >
                           🔒 Premium
                         </span>
                       )}
                       {active && (
-                        <span className={`text-sm leading-none ${cardTextClass}`}>✓</span>
+                        <span
+                          className={`text-sm leading-none ${
+                            cardIsLight ? "text-slate-700" : cardTextClass
+                          }`}
+                        >
+                          ✓
+                        </span>
                       )}
                     </span>
                   </div>
-                  <div className={`mt-1 text-[11px] ${cardDescClass}`}>{t.description}</div>
+                  <div className={`mt-1 text-[11px] leading-snug ${cardDescClass}`}>{t.description}</div>
                 </div>
               </button>
             );
@@ -1648,17 +1668,21 @@ export default function Home() {
           return (
             <div className="space-y-5">
               <div>
-                <div className="mb-2 text-xs font-semibold text-white/70">無料テーマ</div>
+                <div className="mb-2 text-xs font-semibold text-white/70">Free Themes（無料テーマ）</div>
                 <div className="grid grid-cols-2 gap-3">{freeThemes.map(renderThemeCard)}</div>
               </div>
               <div>
-                <div className="mb-2 text-xs font-semibold text-white/70">Premium 没入テーマ</div>
+                <div className="mb-2 text-xs font-semibold text-white/70">
+                  Premium Immersive Themes（Premium 没入テーマ）
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   {premiumImmersiveThemes.map(renderThemeCard)}
                 </div>
               </div>
               <div>
-                <div className="mb-2 text-xs font-semibold text-white/70">Premium ポップテーマ</div>
+                <div className="mb-2 text-xs font-semibold text-white/70">
+                  Premium Pop Themes（Premium ポップテーマ）
+                </div>
                 <div className="grid grid-cols-2 gap-3">{premiumPastelThemes.map(renderThemeCard)}</div>
               </div>
             </div>
